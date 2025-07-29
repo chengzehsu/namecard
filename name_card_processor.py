@@ -4,8 +4,8 @@ import json
 import google.generativeai as genai
 from PIL import Image
 
-from config import Config
 from address_normalizer import AddressNormalizer
+from config import Config
 
 
 class NameCardProcessor:

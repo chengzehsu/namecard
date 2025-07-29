@@ -6,8 +6,8 @@ from datetime import datetime
 
 from notion_client import Client
 
-from config import Config
 from address_normalizer import is_valid_taiwan_address
+from config import Config
 
 
 class NotionManager:

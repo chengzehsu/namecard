@@ -10,10 +10,11 @@
 """
 
 import unittest
+
 from address_normalizer import (
     AddressNormalizer,
-    normalize_address,
     is_valid_taiwan_address,
+    normalize_address,
 )
 
 
