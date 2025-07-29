@@ -478,5 +478,7 @@ if __name__ == "__main__":
     print("🤖 使用 Google Gemini AI 識別名片")
     print("⚡ 服務已就緒！")
 
-    # 在開發環境中運行
-    app.run(host="0.0.0.0", port=5002, debug=True)
+    # 使用環境變數中的端口（Zeabur 會自動設定），本地開發時預設為 5002
+    import os
+    port = int(os.environ.get("PORT", 5002))
+    app.run(host="0.0.0.0", port=port, debug=True)
