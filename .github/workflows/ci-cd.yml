@@ -60,11 +60,11 @@ jobs:
     - name: 運行測試
       env:
         # 測試環境變數 (使用模擬值)
-        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN != '' && secrets.LINE_CHANNEL_ACCESS_TOKEN || 'test_token' }}
-        LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET != '' && secrets.LINE_CHANNEL_SECRET || 'test_secret' }}
-        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY != '' && secrets.GOOGLE_API_KEY || 'test_key' }}
-        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY != '' && secrets.NOTION_API_KEY || 'test_notion_key' }}
-        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID != '' && secrets.NOTION_DATABASE_ID || 'test_db_id' }}
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN || 'test_token' }}
+        LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET || 'test_secret' }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || 'test_key' }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY || 'test_notion_key' }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID || 'test_db_id' }}
       run: |
         # 運行基本配置測試
         python -c "import config; print('✅ Config module loads successfully')"
