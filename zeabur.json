@@ -1,0 +1,57 @@
+{
+  "name": "namecard-line-bot",
+  "type": "python",
+  "framework": "flask",
+  "buildCommand": "pip install -r requirements.txt",
+  "startCommand": "python app.py",
+  "environment": {
+    "PYTHON_VERSION": "3.9",
+    "PORT": "5002",
+    "FLASK_ENV": "production"
+  },
+  "regions": ["hkg", "sin"],
+  "scaling": {
+    "minInstances": 1,
+    "maxInstances": 3,
+    "targetCPU": 80
+  },
+  "healthCheck": {
+    "path": "/health",
+    "port": 5002,
+    "timeout": 30,
+    "interval": 60
+  },
+  "volumes": [],
+  "services": {
+    "namecard-app": {
+      "type": "web",
+      "port": 5002,
+      "domain": {
+        "generate": true
+      }
+    }
+  },
+  "addons": [],
+  "prebuiltImage": false,
+  "dockerFile": null,
+  "buildArgs": {},
+  "secrets": [
+    "LINE_CHANNEL_ACCESS_TOKEN",
+    "LINE_CHANNEL_SECRET",
+    "GOOGLE_API_KEY",
+    "NOTION_API_KEY",
+    "NOTION_DATABASE_ID"
+  ],
+  "envVars": {
+    "PORT": "5002",
+    "FLASK_ENV": "production",
+    "PYTHON_VERSION": "3.9"
+  },
+  "description": "名片管理 LINE Bot - 使用 Google Gemini AI 識別名片並存入 Notion",
+  "tags": ["linebot", "ai", "notion", "gemini", "namecard"],
+  "repository": {
+    "type": "github",
+    "autoDeploy": true,
+    "branch": "main"
+  }
+}

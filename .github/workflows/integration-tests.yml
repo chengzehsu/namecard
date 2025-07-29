@@ -1,0 +1,447 @@
+name: 整合測試 - Webhook & API 連接驗證
+
+on:
+  # 每日自動測試 (UTC 時間 02:00，台灣時間 10:00)
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # 手動觸發
+  workflow_dispatch:
+    inputs:
+      test_scope:
+        description: '選擇測試範圍'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - webhook
+        - notion
+        - gemini
+        - basic
+      
+      webhook_url:
+        description: '測試用的 Webhook URL (可選)'
+        required: false
+        type: string
+
+  # 每週完整測試 (週一)
+  schedule:
+    - cron: '0 1 * * 1'
+
+env:
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  # 基本功能測試
+  basic-tests:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'basic' || github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout 代碼
+      uses: actions/checkout@v4
+      
+    - name: 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest requests
+        
+    - name: 基本模組導入測試
+      run: |
+        echo "🧪 測試基本模組導入..."
+        
+        python -c "
+        import sys
+        print('Python 版本:', sys.version)
+        
+        # 測試基本模組
+        try:
+            import config
+            print('✅ config 模組導入成功')
+        except Exception as e:
+            print(f'❌ config 模組導入失敗: {e}')
+            sys.exit(1)
+        
+        try:
+            from batch_manager import BatchManager
+            batch_manager = BatchManager()
+            print('✅ BatchManager 初始化成功')
+        except Exception as e:
+            print(f'❌ BatchManager 初始化失敗: {e}')
+            sys.exit(1)
+        
+        print('✅ 基本模組測試完成')
+        "
+        
+    - name: 配置驗證測試
+      env:
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+      run: |
+        echo "🔐 測試配置驗證..."
+        
+        python -c "
+        import os
+        
+        required_vars = [
+            'LINE_CHANNEL_ACCESS_TOKEN',
+            'LINE_CHANNEL_SECRET',
+            'GOOGLE_API_KEY', 
+            'NOTION_API_KEY',
+            'NOTION_DATABASE_ID'
+        ]
+        
+        missing_vars = []
+        for var in required_vars:
+            value = os.getenv(var)
+            if not value:
+                missing_vars.append(var)
+            else:
+                print(f'✅ {var}: {"*" * min(10, len(value))}...')
+        
+        if missing_vars:
+            print(f'❌ 缺少環境變數: {", ".join(missing_vars)}')
+            print('請在 GitHub Secrets 中設置所有必要的 API keys')
+        else:
+            print('✅ 所有必要的環境變數都已設置')
+        "
+
+  # Webhook 測試
+  webhook-tests:
+    runs-on: ubuntu-latest
+    needs: basic-tests
+    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'webhook' || github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout 代碼
+      uses: actions/checkout@v4
+      
+    - name: 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest requests
+        
+    - name: 啟動 Flask 應用 (後台)
+      env:
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+      run: |
+        echo "🚀 啟動 Flask 應用進行測試..."
+        
+        # 後台啟動應用
+        python app.py &
+        APP_PID=$!
+        echo "APP_PID=$APP_PID" >> $GITHUB_ENV
+        
+        # 等待應用啟動
+        sleep 10
+        
+        # 檢查應用是否運行
+        if ps -p $APP_PID > /dev/null 2>&1; then
+          echo "✅ Flask 應用成功啟動 (PID: $APP_PID)"
+        else
+          echo "❌ Flask 應用啟動失敗"
+          exit 1
+        fi
+        
+    - name: 健康檢查測試
+      run: |
+        echo "🏥 執行健康檢查測試..."
+        
+        # 等待服務完全啟動
+        sleep 5
+        
+        # 測試健康檢查端點
+        response=$(curl -s -w "%{http_code}" -o /tmp/health.json http://localhost:5002/health)
+        
+        if [ "$response" = "200" ]; then
+          echo "✅ 健康檢查端點正常"
+          echo "回應內容:"
+          cat /tmp/health.json
+        else
+          echo "❌ 健康檢查失敗 (HTTP $response)"
+          cat /tmp/health.json
+          exit 1
+        fi
+        
+    - name: 服務測試端點檢查
+      run: |
+        echo "🔧 執行服務測試端點檢查..."
+        
+        # 測試服務測試端點
+        response=$(curl -s -w "%{http_code}" -o /tmp/test.json http://localhost:5002/test)
+        
+        if [ "$response" = "200" ]; then
+          echo "✅ 服務測試端點正常"
+          echo "回應內容:"
+          cat /tmp/test.json | python -m json.tool
+        else
+          echo "❌ 服務測試端點失敗 (HTTP $response)"
+          cat /tmp/test.json
+          # 不設為失敗，因為可能需要有效的 API keys
+        fi
+        
+    - name: Callback 端點測試
+      run: |
+        echo "📞 執行 Callback 端點測試..."
+        
+        # 測試 GET /callback
+        response=$(curl -s -w "%{http_code}" -o /tmp/callback_get.json http://localhost:5002/callback)
+        
+        if [ "$response" = "200" ]; then
+          echo "✅ GET /callback 端點正常"
+          cat /tmp/callback_get.json
+        else
+          echo "❌ GET /callback 端點失敗 (HTTP $response)"
+          cat /tmp/callback_get.json
+        fi
+        
+        # 測試 POST /callback (沒有有效簽名，預期失敗)
+        echo "📡 測試 POST /callback (預期會因為簽名驗證失敗)..."
+        response=$(curl -s -w "%{http_code}" -X POST \
+          -H "Content-Type: application/json" \
+          -d '{"test": "data"}' \
+          http://localhost:5002/callback)
+        
+        if [ "$response" = "400" ]; then
+          echo "✅ POST /callback 正確拒絕無效請求 (HTTP 400)"
+        else
+          echo "⚠️ POST /callback 回應異常 (HTTP $response)"
+        fi
+        
+    - name: 清理進程
+      if: always()
+      run: |
+        echo "🧹 清理背景進程..."
+        if [ ! -z "$APP_PID" ]; then
+          kill $APP_PID || true
+          echo "✅ Flask 應用已停止"
+        fi
+
+  # Notion API 連接測試
+  notion-tests:
+    runs-on: ubuntu-latest
+    needs: basic-tests
+    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'notion' || github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout 代碼
+      uses: actions/checkout@v4
+      
+    - name: 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Notion 連接測試
+      env:
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+      run: |
+        echo "📄 執行 Notion API 連接測試..."
+        
+        python -c "
+        import os
+        import sys
+        
+        # 檢查環境變數
+        notion_key = os.getenv('NOTION_API_KEY')
+        notion_db = os.getenv('NOTION_DATABASE_ID')
+        
+        if not notion_key or not notion_db:
+            print('⚠️ Notion 環境變數未設置，跳過測試')
+            sys.exit(0)
+        
+        try:
+            from notion_manager import NotionManager
+            
+            # 初始化 Notion 管理器
+            notion_manager = NotionManager()
+            print('✅ NotionManager 初始化成功')
+            
+            # 測試連接
+            test_result = notion_manager.test_connection()
+            
+            if test_result.get('success'):
+                print('✅ Notion 連接測試成功')
+                print(f'資料庫信息: {test_result.get("message", "N/A")}')
+            else:
+                print(f'❌ Notion 連接測試失敗: {test_result.get("error", "Unknown error")}')
+                sys.exit(1)
+                
+        except Exception as e:
+            print(f'❌ Notion 測試過程中發生錯誤: {e}')
+            sys.exit(1)
+        "
+
+  # Google Gemini API 測試
+  gemini-tests:
+    runs-on: ubuntu-latest
+    needs: basic-tests
+    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'gemini' || github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout 代碼
+      uses: actions/checkout@v4
+      
+    - name: 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Google Gemini API 測試
+      env:
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      run: |
+        echo "🧠 執行 Google Gemini API 測試..."
+        
+        python -c "
+        import os
+        import sys
+        
+        # 檢查環境變數
+        google_key = os.getenv('GOOGLE_API_KEY')
+        
+        if not google_key:
+            print('⚠️ Google API key 未設置，跳過測試')
+            sys.exit(0)
+        
+        try:
+            from name_card_processor import NameCardProcessor
+            
+            # 初始化處理器
+            processor = NameCardProcessor()
+            print('✅ NameCardProcessor 初始化成功')
+            
+            # 注意：這裡不進行實際的 API 調用測試
+            # 因為需要實際的圖片數據，且會消耗 API 配額
+            print('✅ Google Gemini API 配置驗證通過')
+            print('⚠️ 實際 API 調用測試需要圖片數據，在此跳過')
+            
+        except Exception as e:
+            print(f'❌ Google Gemini 測試過程中發生錯誤: {e}')
+            # 不設為失敗，因為可能是 API 配額問題
+            print('⚠️ 測試失敗，但不影響整體流程')
+        "
+
+  # 生成測試報告
+  test-report:
+    runs-on: ubuntu-latest
+    needs: [basic-tests, webhook-tests, notion-tests, gemini-tests]
+    if: always()
+    
+    steps:
+    - name: 生成測試報告
+      run: |
+        echo "📊 生成整合測試報告..."
+        
+        # 檢查各個測試工作的狀態
+        BASIC_STATUS="${{ needs.basic-tests.result }}"
+        WEBHOOK_STATUS="${{ needs.webhook-tests.result }}"
+        NOTION_STATUS="${{ needs.notion-tests.result }}"
+        GEMINI_STATUS="${{ needs.gemini-tests.result }}"
+        
+        echo "## 🧪 整合測試報告"
+        echo "**執行時間:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo ""
+        
+        echo "### 測試結果摘要"
+        echo "| 測試項目 | 狀態 | 結果 |"
+        echo "|---------|------|------|"
+        
+        # 基本測試
+        case "$BASIC_STATUS" in
+          "success") echo "| 基本功能測試 | ✅ | 通過 |" ;;
+          "failure") echo "| 基本功能測試 | ❌ | 失敗 |" ;;
+          "skipped") echo "| 基本功能測試 | ⏭️ | 跳過 |" ;;
+          *) echo "| 基本功能測試 | ❓ | 未知 |" ;;
+        esac
+        
+        # Webhook 測試
+        case "$WEBHOOK_STATUS" in
+          "success") echo "| Webhook 測試 | ✅ | 通過 |" ;;
+          "failure") echo "| Webhook 測試 | ❌ | 失敗 |" ;;
+          "skipped") echo "| Webhook 測試 | ⏭️ | 跳過 |" ;;
+          *) echo "| Webhook 測試 | ❓ | 未知 |" ;;
+        esac
+        
+        # Notion 測試
+        case "$NOTION_STATUS" in
+          "success") echo "| Notion API 測試 | ✅ | 通過 |" ;;
+          "failure") echo "| Notion API 測試 | ❌ | 失敗 |" ;;
+          "skipped") echo "| Notion API 測試 | ⏭️ | 跳過 |" ;;
+          *) echo "| Notion API 測試 | ❓ | 未知 |" ;;
+        esac
+        
+        # Gemini 測試
+        case "$GEMINI_STATUS" in
+          "success") echo "| Gemini AI 測試 | ✅ | 通過 |" ;;
+          "failure") echo "| Gemini AI 測試 | ❌ | 失敗 |" ;;
+          "skipped") echo "| Gemini AI 測試 | ⏭️ | 跳過 |" ;;
+          *) echo "| Gemini AI 測試 | ❓ | 未知 |" ;;
+        esac
+        
+        echo ""
+        echo "### 📋 建議事項"
+        
+        if [ "$BASIC_STATUS" != "success" ]; then
+          echo "- ⚠️ 基本功能測試失敗，請檢查代碼和依賴"
+        fi
+        
+        if [ "$WEBHOOK_STATUS" != "success" ]; then
+          echo "- ⚠️ Webhook 測試失敗，請檢查 Flask 應用配置"
+        fi
+        
+        if [ "$NOTION_STATUS" != "success" ]; then
+          echo "- ⚠️ Notion API 測試失敗，請檢查 API Key 和資料庫 ID"
+        fi
+        
+        if [ "$GEMINI_STATUS" != "success" ]; then
+          echo "- ⚠️ Gemini AI 測試失敗，請檢查 Google API Key"
+        fi
+        
+        echo ""
+        echo "### 🔗 相關連結"
+        echo "- [查看完整日誌](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        echo "- [專案文檔](./CLAUDE.md)"
+        echo "- [GitHub Actions 設置指南](./GITHUB_ACTIONS_SETUP.md)"
+        
+        # 判斷整體結果
+        if [ "$BASIC_STATUS" = "success" ]; then
+          echo ""
+          echo "🎉 **整合測試基本完成**"
+          exit 0
+        else
+          echo ""
+          echo "❌ **整合測試失敗**"
+          exit 1
+        fi

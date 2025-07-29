@@ -1,0 +1,6 @@
+line-bot-sdk
+pillow
+google-generativeai
+notion-client
+python-dotenv
+flask 

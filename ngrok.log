@@ -1,0 +1,34 @@
+t=2025-07-29T11:20:40+0800 lvl=info msg="no configuration paths supplied"
+t=2025-07-29T11:20:40+0800 lvl=info msg="using configuration at default config path" path="/Users/user/Library/Application Support/ngrok/ngrok.yml"
+t=2025-07-29T11:20:40+0800 lvl=info msg="open config file" path="/Users/user/Library/Application Support/ngrok/ngrok.yml" err=nil
+t=2025-07-29T11:20:41+0800 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2025-07-29T11:20:41+0800 lvl=info msg="client session established" obj=tunnels.session
+t=2025-07-29T11:20:41+0800 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2025-07-29T11:20:41+0800 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:5002 url=https://34c08dfe0795.ngrok-free.app
+t=2025-07-29T11:20:50+0800 lvl=info msg=start pg=/api/tunnels id=dfe095bce57a2ac8
+t=2025-07-29T11:20:50+0800 lvl=info msg=end pg=/api/tunnels id=dfe095bce57a2ac8 status=200 dur=186.666µs
+t=2025-07-29T11:20:54+0800 lvl=info msg="join connections" obj=join id=a710f3540f21 l=127.0.0.1:5002 r=[2402:7500:406:740a:31c7:7057:2873:712e]:55082
+t=2025-07-29T11:20:58+0800 lvl=info msg="join connections" obj=join id=5c6eb871d3b0 l=127.0.0.1:5002 r=[2402:7500:406:740a:31c7:7057:2873:712e]:55167
+t=2025-07-29T11:21:49+0800 lvl=info msg="join connections" obj=join id=718f7d164c4c l=127.0.0.1:5002 r=147.92.149.165:57414
+t=2025-07-29T11:22:06+0800 lvl=info msg="join connections" obj=join id=c13b1ebb0faf l=127.0.0.1:5002 r=147.92.150.197:47354
+t=2025-07-29T12:00:45+0800 lvl=info msg="join connections" obj=join id=2dedf2c8a4b3 l=127.0.0.1:5002 r=147.92.149.166:52692
+t=2025-07-29T12:01:07+0800 lvl=info msg="join connections" obj=join id=87407ed8ed04 l=127.0.0.1:5002 r=147.92.150.194:55930
+t=2025-07-29T12:01:28+0800 lvl=info msg="join connections" obj=join id=1896d0ce66ab l=127.0.0.1:5002 r=147.92.150.194:57878
+t=2025-07-29T12:07:07+0800 lvl=info msg="join connections" obj=join id=0c85a9fdd116 l=127.0.0.1:5002 r=[2402:7500:406:740a:31c7:7057:2873:712e]:54141
+t=2025-07-29T12:09:24+0800 lvl=info msg="join connections" obj=join id=8c1371a14749 l=127.0.0.1:5002 r=147.92.150.197:57796
+t=2025-07-29T12:13:56+0800 lvl=eror msg="heartbeat timeout, terminating session" obj=tunnels.session obj=csess id=b004f950371c clientid=ff21096e8fd87afd68c7b052673de1f3
+t=2025-07-29T12:13:56+0800 lvl=eror msg="session closed, starting reconnect loop" obj=tunnels.session obj=csess id=8452120870d2 err="session closed"
+t=2025-07-29T12:13:57+0800 lvl=info msg="client session established" obj=tunnels.session
+t=2025-07-29T12:13:57+0800 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2025-07-29T12:35:46+0800 lvl=eror msg="session closed, starting reconnect loop" obj=tunnels.session obj=csess id=8452120870d2 err="read tcp 10.0.0.83:63700->18.177.245.43:443: read: connection reset by peer"
+t=2025-07-29T12:35:47+0800 lvl=info msg="client session established" obj=tunnels.session
+t=2025-07-29T12:35:47+0800 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2025-07-29T12:36:01+0800 lvl=eror msg="heartbeat timeout, terminating session" obj=tunnels.session obj=csess id=cc3211cf6ea4 clientid=ff21096e8fd87afd68c7b052673de1f3
+t=2025-07-29T12:51:46+0800 lvl=eror msg="session closed, starting reconnect loop" obj=tunnels.session obj=csess id=8452120870d2 err="read tcp 10.0.0.83:56852->18.177.129.29:443: read: connection reset by peer"
+t=2025-07-29T12:51:46+0800 lvl=info msg="client session established" obj=tunnels.session
+t=2025-07-29T12:51:46+0800 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2025-07-29T12:52:01+0800 lvl=eror msg="heartbeat timeout, terminating session" obj=tunnels.session obj=csess id=2929fb51977b clientid=ff21096e8fd87afd68c7b052673de1f3
+t=2025-07-29T12:58:32+0800 lvl=eror msg="session closed, starting reconnect loop" obj=tunnels.session obj=csess id=8452120870d2 err="read tcp 10.0.0.83:58291->18.177.245.43:443: read: connection reset by peer"
+t=2025-07-29T12:58:32+0800 lvl=info msg="client session established" obj=tunnels.session
+t=2025-07-29T12:58:32+0800 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2025-07-29T12:58:47+0800 lvl=eror msg="heartbeat timeout, terminating session" obj=tunnels.session obj=csess id=e9e92fc8a622 clientid=ff21096e8fd87afd68c7b052673de1f3

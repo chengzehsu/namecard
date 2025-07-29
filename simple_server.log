@@ -1,0 +1,4 @@
+INFO:__main__:🚀 簡單測試服務器啟動在 port 6000
+INFO:__main__:📋 測試 URL: http://localhost:6000
+INFO:__main__:GET /health
+INFO:__main__:127.0.0.1 - "GET /health HTTP/1.1" 200 -
