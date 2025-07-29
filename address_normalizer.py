@@ -101,12 +101,20 @@ class AddressNormalizer:
         """清理地址字串"""
         # 移除多餘空白
         address = re.sub(r"\s+", "", address)
-        
+
         # 處理郵遞區號 - 移除縣市後接數字+區的情況（如：桃園市333龜山區）
         # 匹配模式：縣市名 + 3位數字 + 區名
-        address = re.sub(r"(台北市|新北市|桃園市|台中市|台南市|高雄市)(\d{3})([^市]+區)", r"\1\3", address)
-        address = re.sub(r"(台北縣|桃園縣|台中縣|台南縣|高雄縣|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|澎湖縣|基隆市|新竹市|嘉義市)(\d{3})([^縣市]+[鄉鎮市區])", r"\1\3", address)
-        
+        address = re.sub(
+            r"(台北市|新北市|桃園市|台中市|台南市|高雄市)(\d{3})([^市]+區)",
+            r"\1\3",
+            address,
+        )
+        address = re.sub(
+            r"(台北縣|桃園縣|台中縣|台南縣|高雄縣|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|澎湖縣|基隆市|新竹市|嘉義市)(\d{3})([^縣市]+[鄉鎮市區])",
+            r"\1\3",
+            address,
+        )
+
         # 移除特殊符號（保留中文、數字、常見符號）
         address = re.sub(r"[^\u4e00-\u9fff0-9A-Za-z\-()（）]", "", address)
         return address.strip()
@@ -280,16 +288,20 @@ class AddressNormalizer:
         address_without_city = address
         for city in self.city_mapping.values():
             if address_without_city.startswith(city):
-                address_without_city = address_without_city[len(city):]
+                address_without_city = address_without_city[len(city) :]
                 break
-        
+
         # 優先匹配標準區域格式 (XX區、XX鎮、XX鄉、XX市)
-        district_match = re.search(r"([^路街大道巷弄0-9]{1,4}[區鎮鄉市])", address_without_city)
+        district_match = re.search(
+            r"([^路街大道巷弄0-9]{1,4}[區鎮鄉市])", address_without_city
+        )
         if district_match:
             district = district_match.group(1)
             # 如果匹配到的區域過長，嘗試取前面較短的部分
             if len(district) > 5:
-                short_match = re.search(r"([^路街大道巷弄0-9]{1,3}[區鎮鄉市])", address_without_city)
+                short_match = re.search(
+                    r"([^路街大道巷弄0-9]{1,3}[區鎮鄉市])", address_without_city
+                )
                 if short_match:
                     district = short_match.group(1)
             components["district"] = district

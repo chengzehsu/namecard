@@ -330,9 +330,10 @@ def handle_image_message(event):
 
         # 下載圖片 (加入重試機制)
         import time
+
         max_retries = 3
         retry_delay = 2
-        
+
         for attempt in range(max_retries):
             try:
                 message_content = line_bot_api.get_message_content(event.message.id)
@@ -427,7 +428,7 @@ def handle_image_message(event):
 
     except Exception as e:
         print(f"❌ 處理圖片時發生錯誤: {e}")
-        
+
         # 根據錯誤類型提供更友善的訊息
         error_str = str(e)
         if "api-data.line.me" in error_str or "name resolution" in error_str.lower():
