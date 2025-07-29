@@ -7,6 +7,7 @@ from datetime import datetime
 from notion_client import Client
 
 from config import Config
+from address_normalizer import is_valid_taiwan_address
 
 
 class NotionManager:
@@ -39,6 +40,13 @@ class NotionManager:
                     print("✅ 名片圖片處理資訊已成功添加到 Notion 頁面")
                 except Exception as img_error:
                     print(f"⚠️ 添加圖片資訊失敗，但頁面建立成功: {img_error}")
+            
+            # 添加地址處理資訊
+            if card_data.get('_address_confidence') is not None:
+                try:
+                    self._add_address_processing_info(page_id, card_data)
+                except Exception as addr_error:
+                    print(f"⚠️ 添加地址處理資訊失敗: {addr_error}")
 
             return {"success": True, "notion_page_id": page_id, "url": page_url}
 
@@ -103,11 +111,30 @@ class NotionManager:
                     "rich_text": [{"text": {"content": "待補充電話資訊"}}]
                 }
 
-        # 地址 (rich_text 類型)
+        # 地址 (rich_text 類型) - 添加地址驗證
         if card_data.get("address"):
+            address = card_data["address"]
             properties["地址"] = {
-                "rich_text": [{"text": {"content": card_data["address"]}}]
+                "rich_text": [{"text": {"content": address}}]
             }
+            
+            # 添加地址驗證資訊
+            if not is_valid_taiwan_address(address):
+                # 如果不是有效的台灣地址，添加驗證警告
+                validation_note = f"⚠️ 地址格式待確認"
+                
+                # 檢查是否有地址信心度資訊
+                address_confidence = card_data.get('_address_confidence', 0)
+                if address_confidence < 0.5:
+                    validation_note += f" (識別信心度: {address_confidence:.2f})"
+                
+                # 將驗證資訊添加到備註中
+                current_notes = card_data.get("notes", "")
+                if validation_note not in current_notes:
+                    if current_notes:
+                        card_data["notes"] = f"{current_notes}; {validation_note}"
+                    else:
+                        card_data["notes"] = validation_note
 
         # 取得聯繫來源
         if card_data.get("contact_source"):
@@ -292,6 +319,95 @@ class NotionManager:
             )
         except Exception as e:
             print(f"❌ 添加簡單圖片說明失敗: {e}")
+
+    def _add_address_processing_info(self, page_id, card_data):
+        """添加地址處理詳細資訊到 Notion 頁面"""
+        try:
+            original_address = card_data.get('_original_address', '')
+            normalized_address = card_data.get('address', '')
+            confidence = card_data.get('_address_confidence', 0)
+            is_taiwan = is_valid_taiwan_address(normalized_address)
+            
+            # 只有當地址有變化或信心度較低時才添加詳細資訊
+            if original_address != normalized_address or confidence < 0.8:
+                confidence_emoji = "🟢" if confidence >= 0.8 else "🟡" if confidence >= 0.5 else "🔴"
+                taiwan_status = "✅ 台灣地址" if is_taiwan else "❓ 非台灣地址或格式異常"
+                
+                self.notion.blocks.children.append(
+                    block_id=page_id,
+                    children=[
+                        {
+                            "object": "block",
+                            "type": "divider",
+                            "divider": {}
+                        },
+                        {
+                            "object": "block",
+                            "type": "heading_3",
+                            "heading_3": {
+                                "rich_text": [
+                                    {"type": "text", "text": {"content": "📍 地址處理詳情"}}
+                                ]
+                            },
+                        },
+                        {
+                            "object": "block",
+                            "type": "paragraph",
+                            "paragraph": {
+                                "rich_text": [
+                                    {
+                                        "type": "text",
+                                        "text": {
+                                            "content": f"{confidence_emoji} 識別信心度: {confidence:.2f}\n{taiwan_status}\n📅 處理時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                                        },
+                                    }
+                                ]
+                            },
+                        },
+                    ]
+                )
+                
+                # 如果地址有變化，顯示原始vs正規化對比
+                if original_address != normalized_address:
+                    self.notion.blocks.children.append(
+                        block_id=page_id,
+                        children=[
+                            {
+                                "object": "block",
+                                "type": "toggle",
+                                "toggle": {
+                                    "rich_text": [
+                                        {
+                                            "type": "text",
+                                            "text": {"content": "🔄 地址正規化對比"},
+                                        }
+                                    ],
+                                    "children": [
+                                        {
+                                            "object": "block",
+                                            "type": "paragraph",
+                                            "paragraph": {
+                                                "rich_text": [
+                                                    {
+                                                        "type": "text",
+                                                        "text": {
+                                                            "content": f"📝 原始地址:\n{original_address}\n\n✨ 正規化後:\n{normalized_address}",
+                                                        },
+                                                        "annotations": {"code": True}
+                                                    }
+                                                ]
+                                            },
+                                        }
+                                    ],
+                                },
+                            }
+                        ]
+                    )
+                
+                print("✅ 地址處理資訊已添加到 Notion 頁面")
+                
+        except Exception as e:
+            print(f"❌ 添加地址處理資訊失敗: {e}")
 
     def test_connection(self):
         """測試 Notion 連接和資料庫存取權限"""

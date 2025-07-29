@@ -70,6 +70,13 @@ jobs:
           python test_new_webhook.py
         fi
         
+        # 運行地址正規化測試 (NEW)
+        if [ -f "test_address_normalizer.py" ]; then
+          echo "🧪 執行地址正規化測試..."
+          python3 test_address_normalizer.py
+          echo "✅ 地址正規化測試完成"
+        fi
+        
         # 檢查主要模組是否可以正常導入
         python -c "
         try:
@@ -86,6 +93,19 @@ jobs:
             
         from batch_manager import BatchManager
         print('✅ BatchManager 模組正常')
+        
+        try:
+            from address_normalizer import AddressNormalizer, normalize_address, is_valid_taiwan_address
+            print('✅ AddressNormalizer 模組正常')
+            
+            # 快速功能測試
+            result = normalize_address('台北信義區信義路五段7號')
+            if result['normalized']:
+                print('✅ 地址正規化功能正常運作')
+            else:
+                print('⚠️ 地址正規化功能異常')
+        except Exception as e:
+            print(f'❌ AddressNormalizer 模組錯誤: {e}')
         
         print('✅ 所有核心模組檢查完成')
         "

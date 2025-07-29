@@ -11,6 +11,8 @@ LINE Bot Webhook (Flask)
     ↓
 名片圖片處理 (Google Gemini AI)
     ↓
+地址正規化處理 (Address Normalizer) 🆕
+    ↓
 資料存儲 (Notion API)
     ↓
 批次狀態管理 (內存管理)
@@ -29,8 +31,10 @@ namecard/
 ├── name_card_processor.py          # Gemini AI 名片識別處理器
 ├── notion_manager.py               # Notion 資料庫操作管理器
 ├── batch_manager.py                # 批次處理狀態管理器
+├── address_normalizer.py           # 地址正規化處理器 (NEW)
 ├── pr_creator.py                   # PR 自動創建功能
 ├── test_new_webhook.py             # Webhook 測試工具
+├── test_address_normalizer.py      # 地址正規化測試 (NEW)
 ├── .github/
 │   └── workflows/
 │       ├── ci-cd.yml               # CI/CD 自動化流程
@@ -61,9 +65,13 @@ namecard/
   - 決策影響力 (decision_influence)
   - Email (email)
   - 電話 (phone)
-  - 地址 (address)
+  - 地址 (address) - **整合地址正規化** 🆕
   - 聯繫來源 (contact_source)
   - 備註 (notes)
+- **新增功能** 🆕:
+  - 自動地址正規化處理
+  - 地址信心度評估
+  - 地址格式警告提示
 
 ### 3. Notion 資料庫管理器 (notion_manager.py)
 - **功能**: 建立 Notion 頁面記錄
@@ -72,6 +80,10 @@ namecard/
   - 容錯處理 (格式錯誤時建立備註欄位)
   - 圖片處理資訊記錄
   - 手動貼圖提示區塊
+  - **地址驗證和處理資訊** 🆕
+    - 台灣地址格式驗證
+    - 地址正規化前後對比顯示
+    - 地址信心度和處理狀態展示
 
 ### 4. 批次處理管理器 (batch_manager.py)
 - **功能**: 管理用戶批次處理狀態
@@ -81,7 +93,18 @@ namecard/
   - 即時進度追蹤
   - 統計報告生成
 
-### 5. PR 自動創建器 (pr_creator.py)
+### 5. 地址正規化處理器 (address_normalizer.py) 🆕
+- **功能**: 台灣地址標準化和驗證
+- **特色**:
+  - 縣市名稱統一化 (台北 → 台北市)
+  - 區域名稱標準化 (信義 → 信義區)
+  - 道路段數中文化 (5段 → 五段)
+  - 樓層格式統一 (1F → 1樓, B1 → 地下1樓)
+  - 地址組件解析和重建
+  - 信心度評估和警告提示
+  - 台灣地址格式驗證
+
+### 6. PR 自動創建器 (pr_creator.py)
 - **功能**: 自動創建 GitHub Pull Request
 - **特色**:
   - 自然語言需求解析
@@ -303,6 +326,19 @@ python test_new_webhook.py
 - GET /callback 測試  
 - POST /callback 模擬測試
 
+#### 地址正規化測試 (test_address_normalizer.py) 🆕
+```bash
+python3 test_address_normalizer.py
+```
+- 台灣地址標準化測試
+- 縣市區域名稱正規化測試
+- 樓層格式統一測試
+- 道路段數中文化測試
+- 地址組件解析測試
+- 信心度計算驗證
+- 無效地址處理測試
+- 非台灣地址識別測試
+
 ### GitHub Actions 測試
 
 #### CI/CD Pipeline 測試
@@ -398,6 +434,16 @@ git push origin main                # 觸發 CI/CD
 - ✅ **創建自動 PR 生成和 Issue 轉代碼功能**
 - ✅ **完善測試、代碼品質檢查、安全掃描流程**
 - ✅ **更新專案文檔和配置指南**
+- ✅ **🆕 實作地址正規化功能**
+  - 創建 `address_normalizer.py` 地址標準化模組
+  - 整合台灣地址正規化到名片處理流程
+  - 縣市名稱統一化 (台北 → 台北市)
+  - 區域名稱標準化 (信義 → 信義區)
+  - 道路段數中文化 (5段 → 五段)
+  - 樓層格式統一 (1F → 1樓, B1 → 地下1樓)
+  - 地址信心度評估和警告系統
+  - Notion 頁面地址處理詳情展示
+  - 完整測試套件 (`test_address_normalizer.py`)
 
 ### 2025-07-28
 - ✅ 實作基本名片識別功能

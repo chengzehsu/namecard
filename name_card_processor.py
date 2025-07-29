@@ -5,14 +5,16 @@ import google.generativeai as genai
 from PIL import Image
 
 from config import Config
+from address_normalizer import AddressNormalizer
 
 
 class NameCardProcessor:
     def __init__(self):
-        """初始化 Gemini AI 模型"""
+        """初始化 Gemini AI 模型和地址正規化器"""
         try:
             genai.configure(api_key=Config.GOOGLE_API_KEY)
             self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
+            self.address_normalizer = AddressNormalizer()
         except Exception as e:
             raise Exception(f"初始化 Gemini 模型失敗: {e}")
 
@@ -78,6 +80,24 @@ class NameCardProcessor:
                     "error": "Gemini 返回的不是有效的 JSON 對象",
                     "raw_response": raw_response,
                 }
+
+            # 地址正規化處理
+            if extracted_data.get('address'):
+                address_result = self.address_normalizer.normalize_address(extracted_data['address'])
+                extracted_data['address'] = address_result['normalized']
+                
+                # 添加地址處理資訊到備註中
+                if address_result['warnings']:
+                    address_warnings = f"地址處理警告: {', '.join(address_result['warnings'])}"
+                    current_notes = extracted_data.get('notes', '')
+                    if current_notes:
+                        extracted_data['notes'] = f"{current_notes}; {address_warnings}"
+                    else:
+                        extracted_data['notes'] = address_warnings
+                
+                # 添加地址信心度資訊
+                extracted_data['_address_confidence'] = address_result['confidence']
+                extracted_data['_original_address'] = address_result['original']
 
             return extracted_data
 
