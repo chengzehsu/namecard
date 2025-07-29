@@ -110,7 +110,7 @@ jobs:
     - name: 安裝 Zeabur CLI
       run: |
         echo "📦 安裝 Zeabur CLI..."
-        curl -fsSL https://zeabur.com/install.sh | bash
+        curl -sSL https://dub.sh/zeabur | bash
         
         # 添加到 PATH
         echo "$HOME/.zeabur/bin" >> $GITHUB_PATH
