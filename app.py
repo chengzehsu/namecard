@@ -328,11 +328,24 @@ def handle_image_message(event):
             event.reply_token, TextSendMessage(text=processing_message)
         )
 
-        # 下載圖片
-        message_content = line_bot_api.get_message_content(event.message.id)
-        image_bytes = b""
-        for chunk in message_content.iter_content():
-            image_bytes += chunk
+        # 下載圖片 (加入重試機制)
+        import time
+        max_retries = 3
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                message_content = line_bot_api.get_message_content(event.message.id)
+                image_bytes = b""
+                for chunk in message_content.iter_content():
+                    image_bytes += chunk
+                break  # 成功時跳出重試循環
+            except Exception as e:
+                if attempt == max_retries - 1:  # 最後一次重試失敗
+                    raise e
+                print(f"⚠️ 第 {attempt + 1} 次獲取圖片失敗，{retry_delay} 秒後重試: {e}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # 指數退避
 
         # 使用 Gemini 識別名片
         print("🔍 開始 Gemini AI 識別...")
@@ -414,7 +427,21 @@ def handle_image_message(event):
 
     except Exception as e:
         print(f"❌ 處理圖片時發生錯誤: {e}")
-        error_msg = f"❌ 處理過程中發生錯誤: {str(e)}"
+        
+        # 根據錯誤類型提供更友善的訊息
+        error_str = str(e)
+        if "api-data.line.me" in error_str or "name resolution" in error_str.lower():
+            error_msg = """❌ 網路連接問題
+
+伺服器暫時無法連接到 LINE API，這通常是暫時性問題。
+
+🔄 **建議解決方式:**
+• 請稍候 1-2 分鐘後重試
+• 如果問題持續，請聯繫管理員
+
+⚠️ 這是網路基礎設施問題，不是您的名片問題。"""
+        else:
+            error_msg = f"❌ 處理過程中發生錯誤: {error_str}"
 
         # 記錄失敗（如果在批次模式中）
         if is_batch_mode:
