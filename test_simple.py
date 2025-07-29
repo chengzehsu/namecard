@@ -13,8 +13,8 @@ def test_basic_functionality():
 
 def test_imports():
     """Test that core modules can be imported"""
-    import sys
     import os
+    import sys
 
     assert sys.version_info >= (3, 8)
     assert os.path.exists(".")
