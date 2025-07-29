@@ -3,23 +3,24 @@
 用於 Railway 部署的 LINE Bot 應用
 """
 import os
-from flask import Flask, request, abort
+
+from flask import Flask, abort, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import (
-    MessageEvent, TextMessage, ImageMessage, TextSendMessage
-)
+from linebot.models import (ImageMessage, MessageEvent, TextMessage,
+                            TextSendMessage)
+
+from batch_manager import BatchManager
 from name_card_processor import NameCardProcessor
 from notion_manager import NotionManager
-from batch_manager import BatchManager
 from pr_creator import PRCreator
 
 # 環境變數設定（用於 Railway）
-LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
-NOTION_API_KEY = os.getenv('NOTION_API_KEY')
-NOTION_DATABASE_ID = os.getenv('NOTION_DATABASE_ID')
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+NOTION_API_KEY = os.getenv("NOTION_API_KEY")
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
 app = Flask(__name__)
 
@@ -37,34 +38,37 @@ try:
 except Exception as e:
     print(f"❌ 處理器初始化失敗: {e}")
 
-@app.route("/callback", methods=['POST'])
+
+@app.route("/callback", methods=["POST"])
 def callback():
     """LINE Bot webhook 回調函數"""
-    signature = request.headers.get('X-Line-Signature')
-    
+    signature = request.headers.get("X-Line-Signature")
+
     if not signature:
-        return 'Missing X-Line-Signature header', 400
+        return "Missing X-Line-Signature header", 400
 
     body = request.get_data(as_text=True)
-    
+
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
 
-    return 'OK'
+    return "OK"
 
-@app.route("/health", methods=['GET'])
+
+@app.route("/health", methods=["GET"])
 def health_check():
     """健康檢查端點"""
     return {"status": "healthy", "message": "LINE Bot is running on Railway"}
+
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text_message(event):
     """處理文字訊息"""
     user_message = event.message.text
-    
-    if user_message.lower() in ['help', '幫助', '說明']:
+
+    if user_message.lower() in ["help", "幫助", "說明"]:
         help_text = """🤖 名片管理 LINE Bot 使用說明
 
 📸 **上傳名片圖片**
@@ -78,16 +82,14 @@ def handle_text_message(event):
 - 支援中英文名片
 
 ❓ 需要幫助請輸入 "help" """
-        
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=help_text)
-        )
+
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=help_text))
     else:
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="請上傳名片圖片，我會幫您識別並存入 Notion 📸")
+            TextSendMessage(text="請上傳名片圖片，我會幫您識別並存入 Notion 📸"),
         )
+
 
 @handler.add(MessageEvent, message=ImageMessage)
 def handle_image_message(event):
@@ -95,30 +97,29 @@ def handle_image_message(event):
     try:
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="📸 收到名片圖片！正在使用 AI 識別中，請稍候...")
+            TextSendMessage(text="📸 收到名片圖片！正在使用 AI 識別中，請稍候..."),
         )
-        
+
         # 下載圖片
         message_content = line_bot_api.get_message_content(event.message.id)
-        image_bytes = b''
+        image_bytes = b""
         for chunk in message_content.iter_content():
             image_bytes += chunk
-        
+
         # 使用 Gemini 識別名片
         extracted_info = card_processor.extract_info_from_image(image_bytes)
-        
-        if 'error' in extracted_info:
+
+        if "error" in extracted_info:
             error_message = f"❌ 名片識別失敗: {extracted_info['error']}"
             line_bot_api.push_message(
-                event.source.user_id,
-                TextSendMessage(text=error_message)
+                event.source.user_id, TextSendMessage(text=error_message)
             )
             return
-        
+
         # 存入 Notion
         notion_result = notion_manager.create_name_card_record(extracted_info)
-        
-        if notion_result['success']:
+
+        if notion_result["success"]:
             success_message = f"""✅ 名片資訊已成功存入 Notion！
 
 👤 **姓名:** {extracted_info.get('name', 'N/A')}
@@ -130,24 +131,23 @@ def handle_image_message(event):
 📍 **地址:** {extracted_info.get('address', 'N/A')}
 
 🔗 **Notion 頁面:** {notion_result['url']}"""
-            
+
             line_bot_api.push_message(
-                event.source.user_id,
-                TextSendMessage(text=success_message)
+                event.source.user_id, TextSendMessage(text=success_message)
             )
         else:
             error_message = f"❌ Notion 存入失敗: {notion_result['error']}"
             line_bot_api.push_message(
-                event.source.user_id,
-                TextSendMessage(text=error_message)
+                event.source.user_id, TextSendMessage(text=error_message)
             )
-            
+
     except Exception as e:
         line_bot_api.push_message(
             event.source.user_id,
-            TextSendMessage(text=f"❌ 處理過程中發生錯誤: {str(e)}")
+            TextSendMessage(text=f"❌ 處理過程中發生錯誤: {str(e)}"),
         )
 
+
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)

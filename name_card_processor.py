@@ -1,8 +1,11 @@
-import json
 import io
-from PIL import Image
+import json
+
 import google.generativeai as genai
+from PIL import Image
+
 from config import Config
+
 
 class NameCardProcessor:
     def __init__(self):
@@ -12,12 +15,12 @@ class NameCardProcessor:
             self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
         except Exception as e:
             raise Exception(f"初始化 Gemini 模型失敗: {e}")
-    
+
     def extract_info_from_image(self, image_bytes):
         """從名片圖片中提取結構化資訊"""
         if not image_bytes:
             return {"error": "沒有圖像數據"}
-        
+
         # 準備 Gemini prompt，專門針對 Notion 欄位優化
         prompt = """
         請你扮演一位專業的名片信息提取助手。仔細分析這張名片圖像，提取以下欄位的資訊：
@@ -47,15 +50,15 @@ class NameCardProcessor:
 
         JSON 輸出:
         """
-        
+
         try:
             # 轉換為 PIL Image
             img_pil = Image.open(io.BytesIO(image_bytes))
-            
+
             # 發送請求到 Gemini
             response = self.model.generate_content([prompt, img_pil])
             raw_response = response.text.strip()
-            
+
             # 清理回應文字
             if raw_response.startswith("```json"):
                 raw_response = raw_response[7:]
@@ -63,41 +66,47 @@ class NameCardProcessor:
                 raw_response = raw_response[3:]
             if raw_response.endswith("```"):
                 raw_response = raw_response[:-3]
-            
+
             raw_response = raw_response.strip()
-            
+
             # 解析 JSON
             extracted_data = json.loads(raw_response)
-            
+
             # 驗證回應是否為字典
             if not isinstance(extracted_data, dict):
-                return {"error": "Gemini 返回的不是有效的 JSON 對象", "raw_response": raw_response}
-            
+                return {
+                    "error": "Gemini 返回的不是有效的 JSON 對象",
+                    "raw_response": raw_response,
+                }
+
             return extracted_data
-            
+
         except json.JSONDecodeError:
-            return {"error": "無法解析 Gemini 的 JSON 響應", "raw_response": raw_response}
+            return {
+                "error": "無法解析 Gemini 的 JSON 響應",
+                "raw_response": raw_response,
+            }
         except Exception as e:
             return {"error": f"處理圖像時發生錯誤: {str(e)}"}
-    
+
     def format_phone_number(self, phone):
         """格式化電話號碼為 E.164 格式"""
         if not phone:
             return None
-        
+
         # 移除所有非數字字符
-        clean_phone = ''.join(filter(str.isdigit, phone))
-        
+        clean_phone = "".join(filter(str.isdigit, phone))
+
         # 台灣手機號碼處理
-        if clean_phone.startswith('09') and len(clean_phone) == 10:
+        if clean_phone.startswith("09") and len(clean_phone) == 10:
             return f"+886{clean_phone[1:]}"
-        
+
         # 台灣市話處理
-        if clean_phone.startswith('0') and len(clean_phone) >= 9:
+        if clean_phone.startswith("0") and len(clean_phone) >= 9:
             return f"+886{clean_phone[1:]}"
-        
+
         # 已經是國際格式
-        if clean_phone.startswith('886'):
+        if clean_phone.startswith("886"):
             return f"+{clean_phone}"
-        
+
         return phone  # 無法識別格式，返回原始號碼
