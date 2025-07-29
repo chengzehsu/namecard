@@ -80,8 +80,11 @@ def test_name_card_processing():
         test_card = create_test_business_card()
         print("✅ 測試名片圖片建立成功")
 
-        # 儲存測試圖片
-        test_card.save("/Users/user/namecard/test_business_card.png")
+        # 儲存測試圖片（使用相對路徑）
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        test_image_path = os.path.join(current_dir, "test_business_card.png")
+        test_card.save(test_image_path)
         print("💾 測試名片已儲存為 test_business_card.png")
 
         # 轉換為 bytes
