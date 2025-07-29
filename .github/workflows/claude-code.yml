@@ -342,8 +342,8 @@ EOF
       run: |
         echo "🧪 運行測試驗證改動..."
         
-        # 檢查 Python 語法
-        python -m py_compile *.py 2>/dev/null || echo "部分文件需要依賴才能編譯"
+        # 檢查 Python 語法 (排除虛擬環境)
+        find . -name "*.py" -not -path "./.venv/*" -not -path "./venv/*" -not -path "./env/*" -exec python -m py_compile {} \; 2>/dev/null || echo "部分文件需要依賴才能編譯"
         
         # 運行基本導入測試
         python -c "import sys; print('✅ Python 基本功能正常')"

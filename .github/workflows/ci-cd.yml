@@ -36,18 +36,18 @@ jobs:
         
     - name: 代碼品質檢查 - flake8
       run: |
-        # 檢查 Python 語法錯誤和未定義名稱
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # 檢查 Python 語法錯誤和未定義名稱 (排除虛擬環境和不相關目錄)
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,venv,env,.git,.github,__pycache__,.pytest_cache,.tox
         # 檢查代碼複雜度和風格
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --exclude=.venv,venv,env,.git,.github,__pycache__,.pytest_cache,.tox
         
     - name: 代碼格式檢查 - black
       run: |
-        black --check --diff .
+        black --check --diff . --exclude="\.venv|venv|env|__pycache__|\.git"
         
     - name: Import 排序檢查 - isort
       run: |
-        isort --check-only --diff .
+        isort --check-only --diff . --skip-glob="*.venv/*" --skip-glob="*venv/*" --skip-glob="*env/*" --skip-glob="*__pycache__/*"
         
     - name: 運行測試
       env:
