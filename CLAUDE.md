@@ -425,6 +425,7 @@ git push origin main                # 觸發 CI/CD
 ## 📝 開發日誌
 
 ### 2025-07-29
+- ✅ 設置 ZEABUR_TOKEN 並準備部署 🚀
 - ✅ 實作友善的新用戶歡迎功能
 - ✅ 添加 FollowEvent 處理器，歡迎關注 Bot 的用戶
 - ✅ 增強 help 指令，提供詳細使用指南

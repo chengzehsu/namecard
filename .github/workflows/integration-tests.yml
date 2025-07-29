@@ -1,11 +1,7 @@
 name: 整合測試 - Webhook & API 連接驗證
 
 on:
-  # 每日自動測試 (UTC 時間 02:00，台灣時間 10:00)
-  schedule:
-    - cron: '0 2 * * *'
-  
-  # 手動觸發
+  # 手動觸發 (移除自動排程，避免在沒有 secrets 時失敗)
   workflow_dispatch:
     inputs:
       test_scope:
@@ -25,10 +21,6 @@ on:
         required: false
         type: string
 
-  # 每週完整測試 (週一)
-  schedule:
-    - cron: '0 1 * * 1'
-
 env:
   PYTHON_VERSION: '3.9'
 
@@ -36,7 +28,7 @@ jobs:
   # 基本功能測試
   basic-tests:
     runs-on: ubuntu-latest
-    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'basic' || github.event_name == 'schedule'
+    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'basic'
     
     steps:
     - name: Checkout 代碼
@@ -123,7 +115,7 @@ jobs:
   webhook-tests:
     runs-on: ubuntu-latest
     needs: basic-tests
-    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'webhook' || github.event_name == 'schedule'
+    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'webhook'
     
     steps:
     - name: Checkout 代碼
@@ -244,7 +236,7 @@ jobs:
   notion-tests:
     runs-on: ubuntu-latest
     needs: basic-tests
-    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'notion' || github.event_name == 'schedule'
+    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'notion'
     
     steps:
     - name: Checkout 代碼
@@ -305,7 +297,7 @@ jobs:
   gemini-tests:
     runs-on: ubuntu-latest
     needs: basic-tests
-    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'gemini' || github.event_name == 'schedule'
+    if: github.event.inputs.test_scope == 'all' || github.event.inputs.test_scope == 'gemini'
     
     steps:
     - name: Checkout 代碼

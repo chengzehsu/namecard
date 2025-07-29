@@ -25,9 +25,10 @@ jobs:
   auto-pr-creation:
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'claude-code')) ||
+      ((github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'claude-code')) ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude-code')) ||
-      (github.event_name == 'workflow_dispatch')
+      (github.event_name == 'workflow_dispatch')) &&
+      (secrets.ANTHROPIC_API_KEY != '' || secrets.OPENAI_API_KEY != '')
     
     steps:
     - name: Checkout 代碼

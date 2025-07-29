@@ -1,7 +1,7 @@
 name: 部署到 Zeabur
 
 on:
-  # 推送到 main 分支時自動部署
+  # 手動觸發或在有 ZEABUR_TOKEN 時自動部署
   push:
     branches: [ main ]
     paths-ignore:
@@ -84,7 +84,7 @@ jobs:
   deploy-to-zeabur:
     runs-on: ubuntu-latest
     needs: pre-deploy-checks
-    if: always() && (needs.pre-deploy-checks.result == 'success' || needs.pre-deploy-checks.result == 'skipped' || github.event.inputs.force_deploy == 'true')
+    if: always() && (needs.pre-deploy-checks.result == 'success' || needs.pre-deploy-checks.result == 'skipped' || github.event.inputs.force_deploy == 'true') && secrets.ZEABUR_TOKEN != ''
     
     environment: 
       name: ${{ github.event.inputs.environment || 'production' }}
