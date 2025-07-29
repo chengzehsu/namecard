@@ -82,22 +82,26 @@ class NameCardProcessor:
                 }
 
             # 地址正規化處理
-            if extracted_data.get('address'):
-                address_result = self.address_normalizer.normalize_address(extracted_data['address'])
-                extracted_data['address'] = address_result['normalized']
-                
+            if extracted_data.get("address"):
+                address_result = self.address_normalizer.normalize_address(
+                    extracted_data["address"]
+                )
+                extracted_data["address"] = address_result["normalized"]
+
                 # 添加地址處理資訊到備註中
-                if address_result['warnings']:
-                    address_warnings = f"地址處理警告: {', '.join(address_result['warnings'])}"
-                    current_notes = extracted_data.get('notes', '')
+                if address_result["warnings"]:
+                    address_warnings = (
+                        f"地址處理警告: {', '.join(address_result['warnings'])}"
+                    )
+                    current_notes = extracted_data.get("notes", "")
                     if current_notes:
-                        extracted_data['notes'] = f"{current_notes}; {address_warnings}"
+                        extracted_data["notes"] = f"{current_notes}; {address_warnings}"
                     else:
-                        extracted_data['notes'] = address_warnings
-                
+                        extracted_data["notes"] = address_warnings
+
                 # 添加地址信心度資訊
-                extracted_data['_address_confidence'] = address_result['confidence']
-                extracted_data['_original_address'] = address_result['original']
+                extracted_data["_address_confidence"] = address_result["confidence"]
+                extracted_data["_original_address"] = address_result["original"]
 
             return extracted_data
 
