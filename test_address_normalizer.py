@@ -3,7 +3,7 @@
 
 測試基本地址正規化功能，包括：
 - 台灣地址標準化
-- 縣市名稱統一化  
+- 縣市名稱統一化
 - 區域格式標準化
 - 樓層表示法統一
 - 基本地址驗證
@@ -152,7 +152,7 @@ class TestAddressNormalizer(unittest.TestCase):
         """測試組件提取"""
         address = "台北市信義區信義路五段7號101室"
         result = self.normalizer.normalize_address(address)
-        
+
         components = result["components"]
         self.assertEqual(components["city"], "台北市")
         self.assertEqual(components["district"], "信義區")
@@ -175,7 +175,7 @@ class TestAddressNormalizerIntegration(unittest.TestCase):
             "台南市中西區民權路一段205號",
             "高雄市前金區中正四路211號",
             # 政府機關地址
-            "台北市中正區重慶南路一段122號", 
+            "台北市中正區重慶南路一段122號",
             "新北市板橋區中山路一段161號25樓",
             # 學校地址
             "台北市大安區羅斯福路四段1號",

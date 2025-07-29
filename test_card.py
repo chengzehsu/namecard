@@ -82,6 +82,7 @@ def test_name_card_processing():
 
         # 儲存測試圖片（使用相對路徑）
         import os
+
         current_dir = os.path.dirname(os.path.abspath(__file__))
         test_image_path = os.path.join(current_dir, "test_business_card.png")
         test_card.save(test_image_path)
