@@ -129,23 +129,23 @@ jobs:
         echo "⚙️ 創建 Zeabur 部署配置..."
         
         # 創建 zeabur.json 配置文件
-        cat > zeabur.json << 'EOF'
-{
-  "name": "namecard-line-bot",
-  "type": "python",
-  "buildCommand": "pip install -r requirements.txt",
-  "startCommand": "python app.py",
-  "environment": {
-    "PYTHON_VERSION": "3.9",
-    "PORT": "5002"
-  },
-  "regions": ["hkg"],
-  "scaling": {
-    "minInstances": 1,
-    "maxInstances": 2
-  }
-}
-EOF
+        cat > zeabur.json << END_OF_CONFIG
+        {
+          "name": "namecard-line-bot",
+          "type": "python",
+          "buildCommand": "pip install -r requirements.txt",
+          "startCommand": "python app.py",
+          "environment": {
+            "PYTHON_VERSION": "3.9",
+            "PORT": "5002"
+          },
+          "regions": ["hkg"],
+          "scaling": {
+            "minInstances": 1,
+            "maxInstances": 2
+          }
+        }
+        END_OF_CONFIG
         
         echo "✅ 配置文件已創建"
         cat zeabur.json
