@@ -7,8 +7,7 @@ import os
 from flask import Flask, abort, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import (ImageMessage, MessageEvent, TextMessage,
-                            TextSendMessage)
+from linebot.models import ImageMessage, MessageEvent, TextMessage, TextSendMessage
 
 from batch_manager import BatchManager
 from name_card_processor import NameCardProcessor

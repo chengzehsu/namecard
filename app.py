@@ -2,8 +2,13 @@ import requests
 from flask import Flask, abort, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import (FollowEvent, ImageMessage, MessageEvent,
-                            TextMessage, TextSendMessage)
+from linebot.models import (
+    FollowEvent,
+    ImageMessage,
+    MessageEvent,
+    TextMessage,
+    TextSendMessage,
+)
 
 from batch_manager import BatchManager
 from config import Config
