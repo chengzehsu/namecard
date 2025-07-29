@@ -12,16 +12,24 @@ jobs:
     
     strategy:
       matrix:
-        python-version: [3.9, 3.10.x, 3.11]
+        python-version: ['3.9', '3.10', '3.11']
     
     steps:
     - name: Checkout 代碼
       uses: actions/checkout@v4
       
     - name: 設置 Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+        
+    - name: 緩存 pip 依賴
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
         
     - name: 安裝系統依賴
       run: |
@@ -52,11 +60,11 @@ jobs:
     - name: 運行測試
       env:
         # 測試環境變數 (使用模擬值)
-        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN || 'test_token' }}
-        LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET || 'test_secret' }}
-        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || 'test_key' }}
-        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY || 'test_notion_key' }}
-        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID || 'test_db_id' }}
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN != '' && secrets.LINE_CHANNEL_ACCESS_TOKEN || 'test_token' }}
+        LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET != '' && secrets.LINE_CHANNEL_SECRET || 'test_secret' }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY != '' && secrets.GOOGLE_API_KEY || 'test_key' }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY != '' && secrets.NOTION_API_KEY || 'test_notion_key' }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID != '' && secrets.NOTION_DATABASE_ID || 'test_db_id' }}
       run: |
         # 運行基本配置測試
         python -c "import config; print('✅ Config module loads successfully')"
@@ -110,6 +118,59 @@ jobs:
         print('✅ 所有核心模組檢查完成')
         "
         
+    - name: 單元測試
+      run: |
+        echo "🧪 執行單元測試..."
+        
+        # 創建基本的測試案例
+        cat > test_basic_functionality.py << 'EOF'
+import unittest
+import sys
+import os
+sys.path.append('.')
+
+class TestBasicFunctionality(unittest.TestCase):
+    def test_address_normalizer(self):
+        """測試地址正規化功能"""
+        from address_normalizer import normalize_address
+        result = normalize_address('台北市信義區信義路五段7號')
+        self.assertIsInstance(result, dict)
+        self.assertIn('normalized', result)
+        self.assertIn('confidence', result)
+        
+    def test_batch_manager(self):
+        """測試批次管理器"""
+        from batch_manager import BatchManager
+        manager = BatchManager()
+        test_user = 'test_user_123'
+        
+        # 測試批次模式開關
+        self.assertFalse(manager.is_in_batch_mode(test_user))
+        manager.start_batch_mode(test_user)
+        self.assertTrue(manager.is_in_batch_mode(test_user))
+        
+    def test_config_loading(self):
+        """測試配置載入（無需真實 API keys）"""
+        try:
+            import config
+            # 檢查必要屬性是否存在
+            attrs = ['LINE_CHANNEL_ACCESS_TOKEN', 'LINE_CHANNEL_SECRET', 
+                    'GOOGLE_API_KEY', 'NOTION_API_KEY', 'NOTION_DATABASE_ID']
+            for attr in attrs:
+                self.assertTrue(hasattr(config.Config, attr))
+        except Exception as e:
+            self.fail(f"Config 載入失敗: {e}")
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
+EOF
+        
+        # 執行測試
+        python test_basic_functionality.py
+        
+        # 清理測試文件
+        rm -f test_basic_functionality.py
+        
     - name: 應用健康檢查
       env:
         LINE_CHANNEL_ACCESS_TOKEN: 'test_token'
@@ -138,9 +199,9 @@ jobs:
       uses: actions/checkout@v4
       
     - name: 設置 Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.9
+        python-version: '3.9'
         
     - name: 安裝安全掃描工具
       run: |
@@ -148,12 +209,21 @@ jobs:
         
     - name: 安全漏洞掃描 - bandit
       run: |
-        bandit -r . -f txt || true
+        echo "🔒 執行安全漏洞掃描..."
+        bandit -r . -f txt -x ".venv,venv,env,__pycache__,.git" || {
+          echo "⚠️ 發現潛在安全問題，但允許繼續（CI 環境）"
+          exit 0
+        }
         
     - name: 依賴安全檢查 - safety
       run: |
+        echo "🛡️ 檢查依賴套件安全性..."
         pip install -r requirements.txt
-        safety check || true
+        safety check --json || {
+          echo "⚠️ 依賴套件可能有安全風險，請檢查"
+          echo "💡 在生產環境中應該更嚴格處理此問題"
+          exit 0
+        }
 
   build-check:
     runs-on: ubuntu-latest
