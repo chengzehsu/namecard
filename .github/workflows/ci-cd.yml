@@ -122,54 +122,52 @@ jobs:
       run: |
         echo "🧪 執行單元測試..."
         
-        # 創建基本的測試案例
-        cat > test_basic_functionality.py << 'EOF'
-import unittest
-import sys
-import os
-sys.path.append('.')
-
-class TestBasicFunctionality(unittest.TestCase):
-    def test_address_normalizer(self):
-        """測試地址正規化功能"""
-        from address_normalizer import normalize_address
-        result = normalize_address('台北市信義區信義路五段7號')
-        self.assertIsInstance(result, dict)
-        self.assertIn('normalized', result)
-        self.assertIn('confidence', result)
+        # 執行地址正規化測試
+        python -c "
+        import unittest
+        import sys
+        sys.path.append('.')
         
-    def test_batch_manager(self):
-        """測試批次管理器"""
-        from batch_manager import BatchManager
-        manager = BatchManager()
-        test_user = 'test_user_123'
+        # 測試地址正規化功能
+        try:
+            from address_normalizer import normalize_address
+            result = normalize_address('台北市信義區信義路五段7號')
+            assert isinstance(result, dict), 'normalize_address 應返回字典'
+            assert 'normalized' in result, '結果應包含 normalized 欄位'
+            assert 'confidence' in result, '結果應包含 confidence 欄位'
+            print('✅ 地址正規化測試通過')
+        except Exception as e:
+            print(f'❌ 地址正規化測試失敗: {e}')
+            sys.exit(1)
         
-        # 測試批次模式開關
-        self.assertFalse(manager.is_in_batch_mode(test_user))
-        manager.start_batch_mode(test_user)
-        self.assertTrue(manager.is_in_batch_mode(test_user))
+        # 測試批次管理器
+        try:
+            from batch_manager import BatchManager
+            manager = BatchManager()
+            test_user = 'test_user_123'
+            
+            assert not manager.is_in_batch_mode(test_user), '初始狀態應為非批次模式'
+            manager.start_batch_mode(test_user)
+            assert manager.is_in_batch_mode(test_user), '啟動後應為批次模式'
+            print('✅ 批次管理器測試通過')
+        except Exception as e:
+            print(f'❌ 批次管理器測試失敗: {e}')
+            sys.exit(1)
         
-    def test_config_loading(self):
-        """測試配置載入（無需真實 API keys）"""
+        # 測試配置載入
         try:
             import config
-            # 檢查必要屬性是否存在
             attrs = ['LINE_CHANNEL_ACCESS_TOKEN', 'LINE_CHANNEL_SECRET', 
                     'GOOGLE_API_KEY', 'NOTION_API_KEY', 'NOTION_DATABASE_ID']
             for attr in attrs:
-                self.assertTrue(hasattr(config.Config, attr))
+                assert hasattr(config.Config, attr), f'Config 缺少屬性: {attr}'
+            print('✅ 配置載入測試通過')
         except Exception as e:
-            self.fail(f"Config 載入失敗: {e}")
-
-if __name__ == '__main__':
-    unittest.main(verbosity=2)
-EOF
+            print(f'❌ 配置載入測試失敗: {e}')
+            sys.exit(1)
         
-        # 執行測試
-        python test_basic_functionality.py
-        
-        # 清理測試文件
-        rm -f test_basic_functionality.py
+        print('🎉 所有單元測試通過')
+        "
         
     - name: 應用健康檢查
       env:
