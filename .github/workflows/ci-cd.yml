@@ -40,7 +40,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-cov flake8 black isort
+        pip install -r requirements-test.txt
         
     - name: 代碼品質檢查 - flake8
       run: |
@@ -57,7 +57,7 @@ jobs:
       run: |
         isort --check-only --diff . --skip-glob="*.venv/*" --skip-glob="*venv/*" --skip-glob="*env/*" --skip-glob="*__pycache__/*"
         
-    - name: 運行測試
+    - name: 運行 pytest 測試套件
       env:
         # 測試環境變數 (使用模擬值)
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN || 'test_token' }}
@@ -66,26 +66,26 @@ jobs:
         NOTION_API_KEY: ${{ secrets.NOTION_API_KEY || 'test_notion_key' }}
         NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID || 'test_db_id' }}
       run: |
-        # 運行基本配置測試
-        python -c "import config; print('✅ Config module loads successfully')"
+        echo "🧪 運行 pytest 測試套件..."
         
-        # 運行現有測試文件 - 允許測試失敗（因為需要真實 API keys）
-        if [ -f "test_card.py" ]; then
-          python test_card.py || echo "⚠️ test_card.py 需要真實 API keys 才能完全通過"
-        fi
+        # 運行單元測試
+        echo "📝 執行單元測試..."
+        pytest tests/unit/ -v --tb=short --cov-report=term-missing --cov=. --cov-exclude=tests/
         
-        if [ -f "test_new_webhook.py" ]; then
-          python test_new_webhook.py || echo "⚠️ test_new_webhook.py 需要真實服務才能完全通過"
-        fi
+        # 運行整合測試
+        echo "🔗 執行整合測試..."
+        pytest tests/integration/ -v --tb=short
         
-        # 運行地址正規化測試 (NEW) - 允許部分測試失敗
+        # 運行舊版測試文件（兼容性）- 允許失敗
+        echo "🔄 執行舊版測試文件（兼容性檢查）..."
+        
         if [ -f "test_address_normalizer.py" ]; then
-          echo "🧪 執行地址正規化測試..."
-          python3 test_address_normalizer.py || echo "⚠️ 地址正規化測試有部分失敗，但不影響 CI/CD 流程"
-          echo "✅ 地址正規化測試完成"
+          echo "🧪 執行地址正規化舊版測試..."
+          python3 test_address_normalizer.py || echo "⚠️ 舊版地址正規化測試部分失敗（預期情況）"
         fi
         
-        # 檢查主要模組是否可以正常導入
+        # 基本模組導入測試
+        echo "📦 檢查模組導入..."
         python -c "
         try:
             from name_card_processor import NameCardProcessor
@@ -102,72 +102,20 @@ jobs:
         from batch_manager import BatchManager
         print('✅ BatchManager 模組正常')
         
-        try:
-            from address_normalizer import AddressNormalizer, normalize_address, is_valid_taiwan_address
-            print('✅ AddressNormalizer 模組正常')
-            
-            # 快速功能測試
-            result = normalize_address('台北信義區信義路五段7號')
-            if result['normalized']:
-                print('✅ 地址正規化功能正常運作')
-            else:
-                print('⚠️ 地址正規化功能異常')
-        except Exception as e:
-            print(f'❌ AddressNormalizer 模組錯誤: {e}')
+        from address_normalizer import AddressNormalizer
+        print('✅ AddressNormalizer 模組正常')
         
         print('✅ 所有核心模組檢查完成')
         "
         
-    - name: 單元測試
+    - name: 測試覆蓋率檢查
       run: |
-        echo "🧪 執行單元測試..."
+        echo "📊 檢查測試覆蓋率..."
         
-        # 執行地址正規化測試
-        python -c "
-        import unittest
-        import sys
-        sys.path.append('.')
+        # 生成覆蓋率報告
+        pytest tests/ --cov=. --cov-report=term-missing --cov-report=html:htmlcov --cov-exclude=tests/ --cov-fail-under=70
         
-        # 測試地址正規化功能
-        try:
-            from address_normalizer import normalize_address
-            result = normalize_address('台北市信義區信義路五段7號')
-            assert isinstance(result, dict), 'normalize_address 應返回字典'
-            assert 'normalized' in result, '結果應包含 normalized 欄位'
-            assert 'confidence' in result, '結果應包含 confidence 欄位'
-            print('✅ 地址正規化測試通過')
-        except Exception as e:
-            print(f'❌ 地址正規化測試失敗: {e}')
-            sys.exit(1)
-        
-        # 測試批次管理器
-        try:
-            from batch_manager import BatchManager
-            manager = BatchManager()
-            test_user = 'test_user_123'
-            
-            assert not manager.is_in_batch_mode(test_user), '初始狀態應為非批次模式'
-            manager.start_batch_mode(test_user)
-            assert manager.is_in_batch_mode(test_user), '啟動後應為批次模式'
-            print('✅ 批次管理器測試通過')
-        except Exception as e:
-            print(f'❌ 批次管理器測試失敗: {e}')
-            sys.exit(1)
-        
-        # 測試配置載入
-        try:
-            import config
-            attrs = ['LINE_CHANNEL_ACCESS_TOKEN', 'LINE_CHANNEL_SECRET', 
-                    'GOOGLE_API_KEY', 'NOTION_API_KEY', 'NOTION_DATABASE_ID']
-            for attr in attrs:
-                assert hasattr(config.Config, attr), f'Config 缺少屬性: {attr}'
-            print('✅ 配置載入測試通過')
-        except Exception as e:
-            print(f'❌ 配置載入測試失敗: {e}')
-            sys.exit(1)
-        
-        print('🎉 所有單元測試通過')
-        "
+        echo "✅ 測試覆蓋率檢查完成"
         
     - name: 應用健康檢查
       env:
