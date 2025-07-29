@@ -1,4 +1,3 @@
-import requests
 from flask import Flask, abort, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -52,7 +51,7 @@ def callback():
     """LINE Bot webhook 回調函數 - 嚴格按照 LINE API 規範"""
 
     # 記錄請求資訊
-    print(f"📥 收到 POST 請求到 /callback")
+    print("📥 收到 POST 請求到 /callback")
     print(f"📋 Request headers: {dict(request.headers)}")
     print(f"🌍 Remote addr: {request.environ.get('REMOTE_ADDR', 'unknown')}")
     print(f"🔍 User agent: {request.headers.get('User-Agent', 'unknown')}")
@@ -140,7 +139,7 @@ def handle_text_message(event):
                 summary_text += f"\n• {card['name']} ({card['company']})"
 
             if stats["failed_cards"]:
-                summary_text += f"\n\n❌ **失敗記錄:**"
+                summary_text += "\n\n❌ **失敗記錄:**"
                 for i, failed in enumerate(stats["failed_cards"], 1):
                     summary_text += f"\n{i}. {failed['error'][:50]}..."
 
@@ -227,9 +226,9 @@ def handle_text_message(event):
 
             if result["success"]:
                 success_msg = f"""✅ PR 創建成功！
-                
+
 🔗 **PR URL:** {result['pr_url']}
-🌿 **分支:** {result['branch_name']} 
+🌿 **分支:** {result['branch_name']}
 📝 **變更數量:** {result['changes_applied']}
 
 💡 請檢查 GitHub 查看完整的 PR 內容"""
@@ -373,7 +372,7 @@ def handle_image_message(event):
                 # 批次模式簡化回應
                 session_info = batch_manager.get_session_info(user_id)
                 batch_message = f"""✅ 第 {session_info['total_count']} 張名片處理完成
-                
+
 👤 {extracted_info.get('name', 'N/A')} ({extracted_info.get('company', 'N/A')})
 
 {batch_manager.get_batch_progress_message(user_id)}"""
@@ -444,7 +443,8 @@ def test_services():
     # 測試 Gemini (簡單檢查)
     try:
         # 檢查是否能創建處理器實例
-        test_processor = NameCardProcessor()
+        # Test processor initialization
+        NameCardProcessor()
         results["gemini"] = {"success": True, "message": "Gemini 連接正常"}
     except Exception as e:
         results["gemini"] = {"success": False, "error": str(e)}
@@ -480,5 +480,6 @@ if __name__ == "__main__":
 
     # 使用環境變數中的端口（Zeabur 會自動設定），本地開發時預設為 5002
     import os
+
     port = int(os.environ.get("PORT", 5002))
     app.run(host="0.0.0.0", port=port, debug=True)
