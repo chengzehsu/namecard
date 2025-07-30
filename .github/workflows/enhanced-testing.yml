@@ -1,0 +1,289 @@
+name: "Enhanced Testing Strategy - Test Engineer Implementation"
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # 每日 UTC 02:00 執行真實 API 測試
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: '選擇測試類型'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - 'all'
+        - 'unit'
+        - 'integration'
+        - 'performance'
+        - 'api'
+        - 'security'
+
+jobs:
+  # 1. 快速單元測試 (每次 Push 執行)
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 設置 Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-xdist pytest-benchmark
+    
+    - name: 執行單元測試
+      env:
+        LINE_CHANNEL_ACCESS_TOKEN: 'test_token'
+        LINE_CHANNEL_SECRET: 'test_secret'
+        GOOGLE_API_KEY: 'test_key'
+        NOTION_API_KEY: 'test_notion_key'
+        NOTION_DATABASE_ID: 'test_db_id'
+      run: |
+        echo "🧪 執行單元測試套件..."
+        pytest tests/unit/ -v --cov=. --cov-report=term-missing --cov-report=xml \
+          --maxfail=5 --tb=short -x
+        
+        echo "📊 生成覆蓋率報告..."
+        pytest --cov=. --cov-report=html:htmlcov tests/unit/
+    
+    - name: 上傳覆蓋率報告
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-${{ matrix.python-version }}
+
+  # 2. 整合測試 (Push 到 main 分支執行)
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 設置 Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio
+    
+    - name: 執行整合測試
+      env:
+        LINE_CHANNEL_ACCESS_TOKEN: 'test_token'
+        LINE_CHANNEL_SECRET: 'test_secret'
+        GOOGLE_API_KEY: 'test_key'
+        NOTION_API_KEY: 'test_notion_key'
+        NOTION_DATABASE_ID: 'test_db_id'
+      run: |
+        echo "🔄 執行整合測試..."
+        pytest tests/integration/ -v --tb=short --maxfail=3
+        
+        echo "📝 執行端到端工作流程測試..."
+        pytest tests/integration/test_end_to_end_workflow.py -v -s
+
+  # 3. 效能測試 (手動觸發或定期執行)
+  performance-tests:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 設置 Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-benchmark psutil
+    
+    - name: 執行效能測試
+      run: |
+        echo "⚡ 執行效能測試套件..."
+        pytest tests/performance/ -v -s --tb=short \
+          --benchmark-only --benchmark-sort=mean
+        
+        echo "📊 生成效能報告..."
+        pytest tests/performance/test_load_testing.py::test_comparison_batch_managers \
+          --benchmark-json=benchmark_results.json
+    
+    - name: 上傳效能報告
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-report
+        path: benchmark_results.json
+
+  # 4. 真實 API 測試 (僅在有 API 金鑰時執行)
+  real-api-tests:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_type == 'api')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 設置 Python 3.11  
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest requests
+    
+    - name: 執行真實 API 測試
+      env:
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+      run: |
+        echo "🌐 執行真實 API 整合測試..."
+        
+        # 健康檢查
+        pytest tests/api_integration/test_real_apis.py::TestAPIHealthChecks \
+          -v -s --tb=short -m "health_check"
+        
+        # 真實 API 測試 (如果有 API 金鑰)
+        if [ -n "$GOOGLE_API_KEY" ] && [ -n "$NOTION_API_KEY" ]; then
+          echo "🔑 API 金鑰可用，執行完整 API 測試..."
+          pytest tests/api_integration/test_real_apis.py::TestRealAPIIntegration \
+            -v -s --tb=short -m "api and not slow" --maxfail=2
+        else
+          echo "⚠️ API 金鑰不可用，跳過真實 API 測試"
+        fi
+
+  # 5. 安全測試
+  security-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 設置 Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 安裝安全工具
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety semgrep
+    
+    - name: 執行安全掃描
+      run: |
+        echo "🔒 執行安全漏洞掃描..."
+        
+        # Bandit 安全掃描
+        echo "🔍 Bandit 靜態分析..."
+        bandit -r . -f json -o bandit-report.json || true
+        bandit -r . -f txt
+        
+        # Safety 依賴安全檢查
+        echo "📦 Safety 依賴檢查..."
+        safety check --json --output safety-report.json || true
+        safety check
+        
+        # Semgrep 代碼安全掃描
+        echo "🔎 Semgrep 安全規則檢查..."
+        semgrep --config=auto . --json --output=semgrep-report.json || true
+    
+    - name: 上傳安全報告
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          safety-report.json
+          semgrep-report.json
+
+  # 6. 測試報告匯總
+  test-summary:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, security-tests]
+    if: always()
+    
+    steps:
+    - name: 匯總測試結果
+      run: |
+        echo "📊 測試執行摘要:"
+        echo "===================="
+        
+        echo "✅ 單元測試: ${{ needs.unit-tests.result }}"
+        echo "✅ 整合測試: ${{ needs.integration-tests.result }}"  
+        echo "✅ 安全測試: ${{ needs.security-tests.result }}"
+        
+        # 計算整體狀態
+        if [[ "${{ needs.unit-tests.result }}" == "success" ]] && \
+           [[ "${{ needs.security-tests.result }}" == "success" ]]; then
+          echo "🎉 核心測試通過！"
+          echo "test_status=success" >> $GITHUB_ENV
+        else
+          echo "❌ 存在測試失敗"
+          echo "test_status=failure" >> $GITHUB_ENV
+        fi
+    
+    - name: 通知測試結果
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "📢 測試結果通知:"
+        echo "分支: ${{ github.ref }}"
+        echo "提交: ${{ github.sha }}"
+        echo "狀態: ${{ env.test_status }}"
+
+  # 7. 測試指標追蹤 (可選)
+  test-metrics:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 獲取完整歷史
+    
+    - name: 分析測試趨勢
+      run: |
+        echo "📈 分析測試指標趨勢..."
+        
+        # 統計測試文件數量
+        unit_tests=$(find tests/unit -name "test_*.py" | wc -l)
+        integration_tests=$(find tests/integration -name "test_*.py" | wc -l)
+        total_tests=$((unit_tests + integration_tests))
+        
+        echo "測試文件統計:"
+        echo "- 單元測試: $unit_tests 個文件"
+        echo "- 整合測試: $integration_tests 個文件"
+        echo "- 總計: $total_tests 個測試文件"
+        
+        # 計算代碼行數
+        python_lines=$(find . -name "*.py" -not -path "./venv/*" -not -path "./.venv/*" | xargs wc -l | tail -1 | awk '{print $1}')
+        test_lines=$(find tests/ -name "*.py" | xargs wc -l | tail -1 | awk '{print $1}')
+        
+        echo "代碼統計:"
+        echo "- 應用程式代碼: $python_lines 行"
+        echo "- 測試代碼: $test_lines 行"
+        echo "- 測試覆蓋比: $(( test_lines * 100 / python_lines ))%"
