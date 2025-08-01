@@ -27,19 +27,20 @@ class TestLineHandlers:
             # Import app after mocking dependencies
             import app
 
-            self.app_module = app
+            self.client_module = app
 
             # Setup test client
-            self.app = app.app.test_client()
-            self.app.testing = True
+            flask_app = getattr(app, 'app')
+            self.client = flask_app.test_client()
+            flask_app.config['TESTING'] = True
 
     @pytest.mark.unit
     def test_callback_post_success(self):
         """測試成功的 webhook 回調"""
-        with patch.object(self.app_module.handler, "handle") as mock_handle:
+        with patch.object(self.client_module.handler, "handle") as mock_handle:
             mock_handle.return_value = None
 
-            response = self.app.post(
+            response = self.client.post(
                 "/callback",
                 data='{"events": []}',
                 headers={
@@ -55,7 +56,7 @@ class TestLineHandlers:
     @pytest.mark.unit
     def test_callback_missing_signature(self):
         """測試缺少簽名的請求"""
-        response = self.app.post(
+        response = self.client.post(
             "/callback",
             data='{"events": []}',
             headers={"Content-Type": "application/json"},
@@ -67,7 +68,7 @@ class TestLineHandlers:
     @pytest.mark.unit
     def test_callback_wrong_content_type(self):
         """測試錯誤的 Content-Type"""
-        response = self.app.post(
+        response = self.client.post(
             "/callback",
             data='{"events": []}',
             headers={
@@ -82,7 +83,7 @@ class TestLineHandlers:
     @pytest.mark.unit
     def test_callback_empty_body(self):
         """測試空的請求體"""
-        response = self.app.post(
+        response = self.client.post(
             "/callback",
             data="",
             headers={
@@ -97,7 +98,7 @@ class TestLineHandlers:
     @pytest.mark.unit
     def test_callback_get_method(self):
         """測試 GET 方法的回調"""
-        response = self.app.get("/callback")
+        response = self.client.get("/callback")
 
         assert response.status_code == 200
         data = json.loads(response.get_data(as_text=True))
@@ -108,7 +109,7 @@ class TestLineHandlers:
     @pytest.mark.unit
     def test_health_endpoint(self):
         """測試健康檢查端點"""
-        response = self.app.get("/health")
+        response = self.client.get("/health")
 
         assert response.status_code == 200
         data = json.loads(response.get_data(as_text=True))
@@ -119,11 +120,11 @@ class TestLineHandlers:
     def test_test_endpoint(self):
         """測試服務測試端點"""
         with patch.object(
-            self.app_module.notion_manager, "test_connection"
+            self.client_module.notion_manager, "test_connection"
         ) as mock_notion:
             mock_notion.return_value = {"success": True, "message": "Notion 連接正常"}
 
-            response = self.app.get("/test")
+            response = self.client.get("/test")
 
             assert response.status_code == 200
             data = json.loads(response.get_data(as_text=True))
