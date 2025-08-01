@@ -120,10 +120,9 @@ jobs:
         # 創建目錄
         mkdir -p $HOME/.zeabur/bin
         
-        # 下載並安裝 Zeabur CLI (使用正確的下載 URL)
-        ZEABUR_VERSION="v0.5.4"
-        curl -sSL "https://github.com/zeabur/cli/releases/download/${ZEABUR_VERSION}/zeabur_${ZEABUR_VERSION}_linux_amd64.tar.gz" | tar -xz -C /tmp
-        mv /tmp/zeabur $HOME/.zeabur/bin/zeabur
+        # 下載並安裝 Zeabur CLI (直接下載二進制文件)
+        ZEABUR_VERSION="0.5.4"
+        curl -sSL "https://github.com/zeabur/cli/releases/download/v${ZEABUR_VERSION}/zeabur_${ZEABUR_VERSION}_linux_amd64" -o $HOME/.zeabur/bin/zeabur
         chmod +x $HOME/.zeabur/bin/zeabur
         
         # 添加到 PATH
