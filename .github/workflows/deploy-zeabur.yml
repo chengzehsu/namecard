@@ -116,7 +116,13 @@ jobs:
     - name: 安裝 Zeabur CLI
       run: |
         echo "📦 安裝 Zeabur CLI..."
-        curl -sSL https://dub.sh/zeabur | bash
+        
+        # 創建目錄
+        mkdir -p $HOME/.zeabur/bin
+        
+        # 下載並安裝 Zeabur CLI
+        curl -sSL https://github.com/zeabur/cli/releases/latest/download/zeabur_linux_amd64 -o $HOME/.zeabur/bin/zeabur
+        chmod +x $HOME/.zeabur/bin/zeabur
         
         # 添加到 PATH
         echo "$HOME/.zeabur/bin" >> $GITHUB_PATH
