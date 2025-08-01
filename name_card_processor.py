@@ -14,7 +14,7 @@ class NameCardProcessor:
         self.current_api_key = Config.GOOGLE_API_KEY
         self.fallback_api_key = Config.GOOGLE_API_KEY_FALLBACK
         self.using_fallback = False
-        
+
         try:
             genai.configure(api_key=self.current_api_key)
             self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
@@ -26,10 +26,10 @@ class NameCardProcessor:
         """切換到備用 API Key"""
         if not self.fallback_api_key:
             raise Exception("沒有設定備用 API Key (GOOGLE_API_KEY_FALLBACK)")
-        
+
         if self.using_fallback:
             raise Exception("已經在使用備用 API Key，無法再次切換")
-        
+
         try:
             print(f"⚠️ 主要 API Key 額度不足，正在切換到備用 API Key...")
             genai.configure(api_key=self.fallback_api_key)
@@ -45,15 +45,15 @@ class NameCardProcessor:
         """檢查是否為 API 額度超限錯誤"""
         quota_error_keywords = [
             "quota exceeded",
-            "resource exhausted", 
+            "resource exhausted",
             "429",
             "rate limit",
             "usage limit",
             "billing",
             "quota",
-            "exceeded"
+            "exceeded",
         ]
-        
+
         error_str = str(error_message).lower()
         return any(keyword in error_str for keyword in quota_error_keywords)
 
@@ -63,20 +63,26 @@ class NameCardProcessor:
             # 首先嘗試使用當前 API Key
             response = self.model.generate_content(content)
             return response.text.strip()
-            
+
         except Exception as e:
             # 檢查是否為額度超限錯誤
-            if self._is_quota_exceeded_error(str(e)) and not self.using_fallback and self.fallback_api_key:
+            if (
+                self._is_quota_exceeded_error(str(e))
+                and not self.using_fallback
+                and self.fallback_api_key
+            ):
                 try:
                     # 切換到備用 API Key
                     self._switch_to_fallback_api()
-                    
+
                     # 重新嘗試生成內容
                     response = self.model.generate_content(content)
                     return response.text.strip()
-                    
+
                 except Exception as fallback_error:
-                    raise Exception(f"主要和備用 API Key 都失敗: 主要錯誤={str(e)}, 備用錯誤={str(fallback_error)}")
+                    raise Exception(
+                        f"主要和備用 API Key 都失敗: 主要錯誤={str(e)}, 備用錯誤={str(fallback_error)}"
+                    )
             else:
                 # 不是額度錯誤或已經使用備用 API Key，直接拋出原始錯誤
                 raise e
@@ -243,25 +249,27 @@ class NameCardProcessor:
                         card["address"]
                     )
                     card["address"] = address_result["normalized"]
-                    
+
                     # 添加地址處理資訊
                     if address_result["warnings"]:
-                        address_warnings = f"地址處理警告: {', '.join(address_result['warnings'])}"
+                        address_warnings = (
+                            f"地址處理警告: {', '.join(address_result['warnings'])}"
+                        )
                         current_notes = card.get("notes", "")
                         if current_notes:
                             card["notes"] = f"{current_notes}; {address_warnings}"
                         else:
                             card["notes"] = address_warnings
-                    
+
                     # 添加地址信心度資訊
                     card["_address_confidence"] = address_result["confidence"]
                     card["_original_address"] = address_result["original"]
 
             # 添加整體品質評估
             extracted_data = self._assess_overall_quality(extracted_data)
-            
+
             return extracted_data
-            
+
         except Exception as e:
             return {"error": f"處理多名片回應時發生錯誤: {str(e)}"}
 
@@ -276,10 +284,14 @@ class NameCardProcessor:
                 single_card_data["address"] = address_result["normalized"]
 
                 if address_result["warnings"]:
-                    address_warnings = f"地址處理警告: {', '.join(address_result['warnings'])}"
+                    address_warnings = (
+                        f"地址處理警告: {', '.join(address_result['warnings'])}"
+                    )
                     current_notes = single_card_data.get("notes", "")
                     if current_notes:
-                        single_card_data["notes"] = f"{current_notes}; {address_warnings}"
+                        single_card_data["notes"] = (
+                            f"{current_notes}; {address_warnings}"
+                        )
                     else:
                         single_card_data["notes"] = address_warnings
 
@@ -293,18 +305,22 @@ class NameCardProcessor:
                     {
                         **single_card_data,
                         "card_index": 1,
-                        "confidence_score": self._calculate_single_card_confidence(single_card_data),
-                        "field_confidence": self._calculate_field_confidence(single_card_data),
+                        "confidence_score": self._calculate_single_card_confidence(
+                            single_card_data
+                        ),
+                        "field_confidence": self._calculate_field_confidence(
+                            single_card_data
+                        ),
                         "clarity_issues": [],
-                        "suggestions": []
+                        "suggestions": [],
                     }
                 ],
                 "overall_quality": self._assess_single_card_quality(single_card_data),
-                "processing_suggestions": []
+                "processing_suggestions": [],
             }
-            
+
             return multi_card_format
-            
+
         except Exception as e:
             return {"error": f"轉換單一名片格式時發生錯誤: {str(e)}"}
 
@@ -319,16 +335,16 @@ class NameCardProcessor:
             # 計算平均信心度
             total_confidence = sum(card.get("confidence_score", 0.5) for card in cards)
             avg_confidence = total_confidence / len(cards)
-            
+
             # 檢查關鍵欄位完整性
             complete_cards = 0
             for card in cards:
                 required_fields = ["name", "company"]
                 if all(card.get(field) for field in required_fields):
                     complete_cards += 1
-            
+
             completeness_ratio = complete_cards / len(cards)
-            
+
             # 綜合評估
             if avg_confidence >= 0.8 and completeness_ratio >= 0.8:
                 multi_card_data["overall_quality"] = "good"
@@ -336,19 +352,21 @@ class NameCardProcessor:
                 multi_card_data["overall_quality"] = "partial"
             else:
                 multi_card_data["overall_quality"] = "poor"
-            
+
             # 生成處理建議
             suggestions = []
             for i, card in enumerate(cards, 1):
                 if card.get("confidence_score", 0.5) < 0.6:
                     suggestions.append(f"第{i}張名片識別品質較差，建議重新拍攝")
                 if card.get("clarity_issues"):
-                    suggestions.append(f"第{i}張名片存在清晰度問題: {', '.join(card['clarity_issues'])}")
-            
+                    suggestions.append(
+                        f"第{i}張名片存在清晰度問題: {', '.join(card['clarity_issues'])}"
+                    )
+
             multi_card_data["processing_suggestions"] = suggestions
-            
+
             return multi_card_data
-            
+
         except Exception as e:
             multi_card_data["overall_quality"] = "error"
             multi_card_data["processing_suggestions"] = [f"品質評估錯誤: {str(e)}"]
@@ -357,7 +375,7 @@ class NameCardProcessor:
     def _calculate_single_card_confidence(self, card_data):
         """計算單一名片的信心度"""
         score = 0.5  # 基礎分數
-        
+
         # 關鍵欄位存在性檢查
         if card_data.get("name"):
             score += 0.2
@@ -367,35 +385,37 @@ class NameCardProcessor:
             score += 0.1
         if card_data.get("phone"):
             score += 0.1
-        
+
         return min(score, 1.0)
 
     def _calculate_field_confidence(self, card_data):
         """計算各欄位的信心度"""
         field_confidence = {}
-        
+
         # 簡單的欄位信心度計算邏輯
         for field in ["name", "company", "email", "phone", "title"]:
             if card_data.get(field):
                 # 基於欄位值的簡單評估
                 value = str(card_data[field])
-                if len(value) > 2 and not any(char in value for char in ["?", "unclear", "模糊"]):
+                if len(value) > 2 and not any(
+                    char in value for char in ["?", "unclear", "模糊"]
+                ):
                     field_confidence[field] = 0.8
                 else:
                     field_confidence[field] = 0.4
             else:
                 field_confidence[field] = 0.0
-        
+
         return field_confidence
 
     def _assess_single_card_quality(self, card_data):
         """評估單一名片的品質"""
         required_fields = ["name", "company"]
         has_all_required = all(card_data.get(field) for field in required_fields)
-        
+
         optional_fields = ["email", "phone", "title"]
         optional_count = sum(1 for field in optional_fields if card_data.get(field))
-        
+
         if has_all_required and optional_count >= 2:
             return "good"
         elif has_all_required:
