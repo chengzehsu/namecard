@@ -76,12 +76,12 @@ jobs:
           # 提交格式修復
           git add .
           git commit -m "style: 自動修復代碼格式 (black + isort)
-
-🤖 由 GitHub Actions CI/CD 自動執行
-- black: 代碼格式標準化
-- isort: import 語句排序標準化
-
-Co-Authored-By: GitHub Actions <action@github.com>"
+          
+          🤖 由 GitHub Actions CI/CD 自動執行
+          - black: 代碼格式標準化  
+          - isort: import 語句排序標準化
+          
+          Co-Authored-By: GitHub Actions <action@github.com>"
           
           # 推送修復
           git push
