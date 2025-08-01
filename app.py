@@ -12,6 +12,7 @@ from batch_manager import BatchManager
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import Config
+from line_bot_handler import LineBotApiHandler
 from multi_card_processor import MultiCardProcessor
 from name_card_processor import NameCardProcessor
 from notion_manager import NotionManager
@@ -58,6 +59,9 @@ if not Config.LINE_CHANNEL_ACCESS_TOKEN or not Config.LINE_CHANNEL_SECRET:
 
 line_bot_api = LineBotApi(Config.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(Config.LINE_CHANNEL_SECRET)
+
+# 初始化安全的 LINE Bot API 處理器
+safe_line_bot = LineBotApiHandler(Config.LINE_CHANNEL_ACCESS_TOKEN)
 
 # 初始化處理器
 try:
@@ -144,18 +148,20 @@ def handle_text_message(event):
     user_message = event.message.text.strip()
     user_id = event.source.user_id
 
-    # 批次模式指令處理
+    # 批次模式指令處理  
     if user_message.lower() in ["批次", "batch", "批次模式", "開始批次"]:
         result = batch_manager.start_batch_mode(user_id)
-        line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(text=result["message"])
-        )
+        reply_result = safe_line_bot.safe_reply_message(event.reply_token, result["message"])
+        
+        if not reply_result["success"] and reply_result.get("error_type") == "quota_exceeded":
+            # 記錄離線訊息
+            log_message(f"📝 離線訊息記錄 - 用戶 {user_id}: {user_message}", "INFO")
         return
 
     elif user_message.lower() in ["結束批次", "end batch", "完成批次", "批次結束"]:
         result = batch_manager.end_batch_mode(user_id)
         if result["success"]:
-            stats = result["statistics"]
+            stats = result["statistics"] 
             summary_text = f"""📊 **批次處理完成**
 
 ✅ **處理成功:** {stats['total_processed']} 張
@@ -172,27 +178,18 @@ def handle_text_message(event):
                 for i, failed in enumerate(stats["failed_cards"], 1):
                     summary_text += f"\n{i}. {failed['error'][:50]}..."
 
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=summary_text)
-            )
+            safe_line_bot.safe_reply_message(event.reply_token, summary_text)
         else:
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=result["message"])
-            )
+            safe_line_bot.safe_reply_message(event.reply_token, result["message"])
         return
 
     elif user_message.lower() in ["狀態", "status", "批次狀態"]:
         if batch_manager.is_in_batch_mode(user_id):
             progress_msg = batch_manager.get_batch_progress_message(user_id)
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=progress_msg)
-            )
+            safe_line_bot.safe_reply_message(event.reply_token, progress_msg)
         else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text="您目前不在批次模式中。發送「批次」開始批次處理。"
-                ),
+            safe_line_bot.safe_reply_message(
+                event.reply_token, "您目前不在批次模式中。發送「批次」開始批次處理。"
             )
         return
 
@@ -218,7 +215,7 @@ def handle_text_message(event):
 
 ❓ 需要幫助請輸入 "help" """
 
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=help_text))
+        safe_line_bot.safe_reply_message(event.reply_token, help_text)
 
     elif user_message.lower().startswith(
         "create pr:"
@@ -228,13 +225,11 @@ def handle_text_message(event):
 
         if not pr_description:
             reply_text = "請提供 PR 描述，例如：create pr: 添加用戶登入功能"
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=reply_text)
-            )
+            safe_line_bot.safe_reply_message(event.reply_token, reply_text)
         else:
             # Send processing message
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text="🚀 正在創建 PR，請稍候...")
+            safe_line_bot.safe_reply_message(
+                event.reply_token, "🚀 正在創建 PR，請稍候..."
             )
 
             # Create PR
@@ -249,14 +244,10 @@ def handle_text_message(event):
 
 💡 請檢查 GitHub 查看完整的 PR 內容"""
 
-                line_bot_api.push_message(
-                    event.source.user_id, TextSendMessage(text=success_msg)
-                )
+                safe_line_bot.safe_push_message(event.source.user_id, success_msg)
             else:
                 error_msg = f"❌ PR 創建失敗: {result['error']}"
-                line_bot_api.push_message(
-                    event.source.user_id, TextSendMessage(text=error_msg)
-                )
+                safe_line_bot.safe_push_message(event.source.user_id, error_msg)
         return
 
     else:
@@ -268,8 +259,8 @@ def handle_text_message(event):
             )
 
             if choice_result["action"] == "retake_photo":
-                line_bot_api.reply_message(
-                    event.reply_token, TextSendMessage(text=choice_result["message"])
+                safe_line_bot.safe_reply_message(
+                    event.reply_token, choice_result["message"]
                 )
 
             elif choice_result["action"] in [
@@ -278,8 +269,8 @@ def handle_text_message(event):
             ]:
                 # 處理選擇的名片
                 cards_to_process = choice_result.get("cards_to_process", [])
-                line_bot_api.reply_message(
-                    event.reply_token, TextSendMessage(text=choice_result["message"])
+                safe_line_bot.safe_reply_message(
+                    event.reply_token, choice_result["message"]
                 )
 
                 # 異步處理多張名片（檢查批次模式狀態）
@@ -290,22 +281,18 @@ def handle_text_message(event):
 
             else:
                 # 其他狀況（無效選擇、會話過期等）
-                line_bot_api.reply_message(
-                    event.reply_token, TextSendMessage(text=choice_result["message"])
+                safe_line_bot.safe_reply_message(
+                    event.reply_token, choice_result["message"]
                 )
 
         # 檢查是否在批次模式中
         elif batch_manager.is_in_batch_mode(user_id):
             progress_msg = batch_manager.get_batch_progress_message(user_id)
             reply_text = f"您目前在批次模式中，請發送名片圖片。\n\n{progress_msg}"
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=reply_text)
-            )
+            safe_line_bot.safe_reply_message(event.reply_token, reply_text)
         else:
             reply_text = "請上傳名片圖片，我會幫您識別並存入 Notion 📸\n\n💡 提示：發送「批次」可開啟批次處理模式"
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=reply_text)
-            )
+            safe_line_bot.safe_reply_message(event.reply_token, reply_text)
 
 
 @handler.add(MessageEvent, message=ImageMessage)
@@ -329,12 +316,20 @@ def handle_image_message(event):
         else:
             processing_message = "📸 收到名片圖片！正在使用 AI 識別中，請稍候..."
 
-        line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(text=processing_message)
-        )
+        safe_line_bot.safe_reply_message(event.reply_token, processing_message)
 
         # 下載圖片
-        message_content = line_bot_api.get_message_content(event.message.id)
+        content_result = safe_line_bot.safe_get_message_content(event.message.id)
+        if not content_result["success"]:
+            error_msg = f"❗ 無法下載圖片: {content_result['message']}"
+            if content_result.get("error_type") == "quota_exceeded":
+                fallback_msg = safe_line_bot.create_fallback_message("名片圖片識別", "quota_exceeded")
+                safe_line_bot.safe_push_message(event.source.user_id, fallback_msg)
+            else:
+                safe_line_bot.safe_push_message(event.source.user_id, error_msg)
+            return
+            
+        message_content = content_result["content"]
         image_bytes = b""
         for chunk in message_content.iter_content():
             image_bytes += chunk
@@ -355,9 +350,7 @@ def handle_image_message(event):
                 progress_msg = batch_manager.get_batch_progress_message(user_id)
                 error_message += f"\n\n{progress_msg}"
 
-            line_bot_api.push_message(
-                event.source.user_id, TextSendMessage(text=error_message)
-            )
+            safe_line_bot.safe_push_message(event.source.user_id, error_message)
             return
 
         # 根據分析結果決定處理方式
@@ -366,18 +359,15 @@ def handle_image_message(event):
             choice_message = user_interaction_handler.create_multi_card_session(
                 user_id, analysis_result
             )
-            line_bot_api.push_message(
-                event.source.user_id, TextSendMessage(text=choice_message)
-            )
+            safe_line_bot.safe_push_message(event.source.user_id, choice_message)
             return
 
         # 自動處理（單張高品質名片）
         elif analysis_result.get("auto_process", False):
             cards_to_process = analysis_result.get("cards", [])
             if cards_to_process:
-                line_bot_api.push_message(
-                    event.source.user_id,
-                    TextSendMessage(text="✅ 名片品質良好，正在自動處理..."),
+                safe_line_bot.safe_push_message(
+                    event.source.user_id, "✅ 名片品質良好，正在自動處理..."
                 )
                 # 處理名片（使用原有邏輯，但適配新格式）
                 _process_single_card_from_multi_format(
@@ -400,7 +390,7 @@ def handle_image_message(event):
             progress_msg = batch_manager.get_batch_progress_message(user_id)
             error_msg += f"\n\n{progress_msg}"
 
-        line_bot_api.push_message(event.source.user_id, TextSendMessage(text=error_msg))
+        safe_line_bot.safe_push_message(event.source.user_id, error_msg)
 
 
 @app.route("/health", methods=["GET"])
@@ -427,6 +417,48 @@ def test_services():
         results["gemini"] = {"success": False, "error": str(e)}
 
     return results
+
+
+@app.route("/api-status", methods=["GET"])
+def api_status():
+    """LINE Bot API 狀態監控端點"""
+    status_report = safe_line_bot.get_status_report()
+    
+    # 添加詳細的狀態信息
+    detailed_status = {
+        "timestamp": datetime.now().isoformat(),
+        "line_bot_api": {
+            "operational": status_report["is_operational"],
+            "quota_exceeded": status_report["quota_exceeded"],
+            "quota_reset_time": status_report["quota_reset_time"],
+            "error_statistics": status_report["error_statistics"]
+        },
+        "service_status": {
+            "healthy": not status_report["quota_exceeded"],
+            "degraded_service": status_report["quota_exceeded"],
+            "fallback_mode": status_report["quota_exceeded"]
+        },
+        "recommendations": []
+    }
+    
+    # 基於狀態提供建議
+    if status_report["quota_exceeded"]:
+        detailed_status["recommendations"].extend([
+            "LINE Bot API 配額已達上限",
+            "考慮升級到付費方案", 
+            "或等待下個月配額重置",
+            "目前系統運行在降級模式"
+        ])
+    elif sum(status_report["error_statistics"].values()) > 10:
+        detailed_status["recommendations"].extend([
+            "檢測到較多 API 錯誤",
+            "建議檢查網路連接狀況",
+            "或聯繫 LINE 客服確認服務狀態"
+        ])
+    else:
+        detailed_status["recommendations"].append("系統運行正常")
+    
+    return detailed_status
 
 
 # 添加一個調試用的通用路由
@@ -478,7 +510,7 @@ def _process_single_card_from_multi_format(
 
 {batch_manager.get_batch_progress_message(user_id)}"""
 
-                line_bot_api.push_message(user_id, TextSendMessage(text=batch_message))
+                safe_line_bot.safe_push_message(user_id, batch_message)
             else:
                 # 單張模式詳細回應
                 confidence_info = ""
@@ -500,9 +532,7 @@ def _process_single_card_from_multi_format(
 
 💡 提示：發送「批次」可開啟批次處理模式"""
 
-                line_bot_api.push_message(
-                    user_id, TextSendMessage(text=success_message)
-                )
+                safe_line_bot.safe_push_message(user_id, success_message)
         else:
             error_message = f"❌ Notion 存入失敗: {notion_result['error']}"
 
@@ -512,12 +542,12 @@ def _process_single_card_from_multi_format(
                 progress_msg = batch_manager.get_batch_progress_message(user_id)
                 error_message += f"\n\n{progress_msg}"
 
-            line_bot_api.push_message(user_id, TextSendMessage(text=error_message))
+            safe_line_bot.safe_push_message(user_id, error_message)
 
     except Exception as e:
         error_msg = f"❌ 處理名片時發生錯誤: {str(e)}"
         print(error_msg)
-        line_bot_api.push_message(user_id, TextSendMessage(text=error_msg))
+        safe_line_bot.safe_push_message(user_id, error_msg)
 
 
 def _process_multiple_cards_async(
@@ -607,12 +637,12 @@ def _process_multiple_cards_async(
             progress_msg = batch_manager.get_batch_progress_message(user_id)
             summary_message += f"\n{progress_msg}"
 
-        line_bot_api.push_message(user_id, TextSendMessage(text=summary_message))
+        safe_line_bot.safe_push_message(user_id, summary_message)
 
     except Exception as e:
         error_msg = f"❌ 批次處理多名片時發生錯誤: {str(e)}"
         print(error_msg)
-        line_bot_api.push_message(user_id, TextSendMessage(text=error_msg))
+        safe_line_bot.safe_push_message(user_id, error_msg)
 
 
 if __name__ == "__main__":

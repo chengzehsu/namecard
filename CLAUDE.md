@@ -35,6 +35,8 @@ namecard/
 ├── pr_creator.py                   # PR 自動創建功能
 ├── test_new_webhook.py             # Webhook 測試工具
 ├── test_address_normalizer.py      # 地址正規化測試 (NEW)
+├── test_simple_error_handling.py   # LINE Bot API 錯誤處理測試 (NEW) 🆕
+├── line_bot_handler.py             # LINE Bot API 錯誤處理包裝器 (NEW) 🆕
 ├── format_code.sh                  # 代碼格式化腳本 (NEW) 🆕
 ├── .pre-commit-config.yaml         # Pre-commit hooks 配置 (NEW) 🆕
 ├── .github/
@@ -55,7 +57,8 @@ namecard/
   - `POST /callback` - LINE webhook 回調
   - `GET /health` - 健康檢查
   - `GET /test` - 服務測試
-- **特色**: 支援批次模式和單張模式
+  - `GET /api-status` - API 狀態監控 🆕
+- **特色**: 支援批次模式和單張模式，內建 API 錯誤處理 🆕
 
 ### 2. 名片識別處理器 (name_card_processor.py)
 - **AI 模型**: Google Gemini AI
@@ -127,7 +130,25 @@ namecard/
   - **狀態追蹤**: 完整的會話狀態管理和清理機制
   - **多用戶支援**: 並發處理多個用戶的交互會話
 
-### 8. PR 自動創建器 (pr_creator.py)
+### 8. LINE Bot API 錯誤處理包裝器 (line_bot_handler.py) 🆕
+- **功能**: 提供健壯的 LINE Bot API 錯誤處理和降級服務
+- **特色**:
+  - **API 配額監控**: 自動檢測月度配額用量和重置時間
+  - **智能重試機制**: 根據錯誤類型自動重試或直接失敗
+  - **降級服務**: 當 API 不可用時提供友好的用戶提示
+  - **錯誤統計**: 追蹤各種 API 錯誤的發生頻率
+  - **狀態監控**: 提供詳細的服務狀態報告
+- **錯誤處理**:
+  - `429 配額超限` → 設置配額狀態，等待下月重置
+  - `429 速率限制` → 自動重試機制，建議等待時間
+  - `400/401/403` → 客戶端錯誤，不重試，記錄錯誤
+  - `500+` → 伺服器錯誤，自動重試，延遲處理
+- **安全 API 調用**:
+  - `safe_reply_message()` - 安全回覆訊息
+  - `safe_push_message()` - 安全推播訊息  
+  - `safe_get_message_content()` - 安全獲取內容
+
+### 9. PR 自動創建器 (pr_creator.py)
 - **功能**: 自動創建 GitHub Pull Request
 - **特色**:
   - 自然語言需求解析
@@ -940,6 +961,25 @@ python3 test_api_fallback.py
   - 備用機制端到端測試
 - **測試結果**: 🎉 所有測試通過！API 備用機制正常工作
 
+#### LINE Bot API 錯誤處理測試 (test_simple_error_handling.py) 🆕
+```bash
+python3 test_simple_error_handling.py
+```
+- **錯誤處理邏輯測試**:
+  - API 配額超限 (429) 處理和狀態追蹤
+  - 速率限制 (429) 自動重試機制  
+  - 客戶端錯誤 (400/401/403) 處理
+  - 伺服器錯誤 (500+) 重試機制
+- **降級服務測試**:
+  - 配額超限降級訊息生成
+  - 速率限制建議和等待提示
+  - 網路錯誤處理和用戶指導
+- **狀態監控測試**:
+  - 配額狀態自動追蹤和重置
+  - 錯誤統計和頻率分析
+  - API 健康狀態報告生成
+- **測試結果**: 🎉 所有測試通過！API 錯誤處理機制正常工作
+
 ### GitHub Actions 測試
 
 #### CI/CD Pipeline 測試
@@ -978,6 +1018,7 @@ python3 test_new_webhook.py          # Webhook 測試
 python3 test_address_normalizer.py   # 地址正規化測試
 python3 test_multi_card_processor.py # 多名片系統測試 🆕
 python3 test_api_fallback.py         # API 備用機制測試 🆕
+python3 test_simple_error_handling.py # LINE Bot API 錯誤處理測試 🆕
 
 # 代碼格式化 🆕
 ./format_code.sh                    # 一鍵格式化腳本 (推薦)
@@ -1015,6 +1056,15 @@ git push origin main                # 觸發 CI/CD (會自動格式化)
 ### 3. ngrok 連接不穩定
 **問題**: ngrok URL 會變動
 **解決**: 每次重啟都需要更新 LINE Developers Console 的 Webhook URL
+
+### 4. LINE Bot API 配額限制 🆕
+**問題**: LINE Bot API 達到月度使用配額 (status_code=429)
+**解決**: 
+- **自動檢測**: 系統自動檢測配額狀態並設置重置時間
+- **降級服務**: 提供友好的用戶提示，說明服務暫時受限
+- **狀態監控**: 透過 `/api-status` 端點監控 API 狀態
+- **智能重試**: 針對不同錯誤類型採用不同重試策略
+- **錯誤統計**: 追蹤各種 API 錯誤發生頻率，便於問題診斷
 
 ## 📊 效能指標
 
