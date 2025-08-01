@@ -5,8 +5,8 @@
 """
 
 import json
-import sys
 import os
+import sys
 from datetime import datetime
 
 # 添加專案根目錄到路徑
@@ -14,8 +14,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from multi_card_processor import MultiCardProcessor
-    from user_interaction_handler import UserInteractionHandler
     from name_card_processor import NameCardProcessor
+    from user_interaction_handler import UserInteractionHandler
 except ImportError as e:
     print(f"❌ 導入模組失敗: {e}")
     print("請確保所有相關檔案都在正確位置")

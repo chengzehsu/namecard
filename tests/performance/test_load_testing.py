@@ -3,14 +3,15 @@
 測試系統在高負載下的表現和穩定性
 """
 
-import pytest
+import asyncio
+import os
+import sys
 import threading
 import time
-import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from unittest.mock import patch, MagicMock
-import sys
-import os
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # 添加專案根目錄到 Python 路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -80,8 +81,9 @@ class TestPerformanceLoad:
 
     def test_session_memory_usage(self, enhanced_session_manager):
         """測試會話記憶體使用情況"""
-        import psutil
         import gc
+
+        import psutil
 
         process = psutil.Process()
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB

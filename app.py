@@ -1,17 +1,19 @@
-import sys
 import logging
 import os
+import sys
 from datetime import datetime
-from flask import Flask, request, abort
+
+from flask import Flask, abort, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, ImageMessage, TextSendMessage
+from linebot.models import ImageMessage, MessageEvent, TextMessage, TextSendMessage
+
+from batch_manager import BatchManager
 from config import Config
+from multi_card_processor import MultiCardProcessor
 from name_card_processor import NameCardProcessor
 from notion_manager import NotionManager
-from batch_manager import BatchManager
 from pr_creator import PRCreator
-from multi_card_processor import MultiCardProcessor
 from user_interaction_handler import UserInteractionHandler
 
 # 初始化 Flask 應用

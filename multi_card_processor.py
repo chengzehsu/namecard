@@ -3,7 +3,8 @@
 """
 
 import json
-from typing import Dict, List, Any, Tuple
+from typing import Any, Dict, List, Tuple
+
 from name_card_processor import NameCardProcessor
 
 

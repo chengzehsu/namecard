@@ -3,19 +3,20 @@
 定期驗證與外部服務的整合狀況
 """
 
-import pytest
 import os
+import sys
 import time
 from unittest.mock import patch
+
+import pytest
 import requests
-import sys
 
 # 添加專案根目錄到 Python 路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from config import Config
 from name_card_processor import NameCardProcessor
 from notion_manager import NotionManager
-from config import Config
 
 
 @pytest.mark.api

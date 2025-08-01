@@ -4,13 +4,13 @@
 """
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # 添加專案根目錄到 Python 路徑
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from name_card_processor import NameCardProcessor
 from config import Config
+from name_card_processor import NameCardProcessor
 
 
 def test_api_fallback_mechanism():
