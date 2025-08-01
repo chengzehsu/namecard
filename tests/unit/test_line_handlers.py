@@ -30,9 +30,9 @@ class TestLineHandlers:
             self.client_module = app
 
             # Setup test client
-            flask_app = getattr(app, 'app')
+            flask_app = getattr(app, "app")
             self.client = flask_app.test_client()
-            flask_app.config['TESTING'] = True
+            flask_app.config["TESTING"] = True
 
     @pytest.mark.unit
     def test_callback_post_success(self):
