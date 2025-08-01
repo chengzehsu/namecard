@@ -59,7 +59,8 @@ jobs:
         
     - name: 運行 pytest 測試套件
       env:
-        # 測試環境變數 (使用模擬值)
+        # 測試環境變數 (使用 fallback 值)
+        # Note: IDE warnings about context access are false positives for GitHub Actions
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN || 'test_token' }}
         LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET || 'test_secret' }}
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || 'test_key' }}

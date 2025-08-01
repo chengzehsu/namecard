@@ -7,7 +7,9 @@
   "environment": {
     "PYTHON_VERSION": "3.9",
     "PORT": "5002",
-    "FLASK_ENV": "production"
+    "FLASK_ENV": "production",
+    "FLASK_DEBUG": "false",
+    "PYTHONUNBUFFERED": "1"
   },
   "regions": ["hkg", "sin"],
   "scaling": {
@@ -45,7 +47,9 @@
   "envVars": {
     "PORT": "5002",
     "FLASK_ENV": "production",
-    "PYTHON_VERSION": "3.9"
+    "FLASK_DEBUG": "false",
+    "PYTHON_VERSION": "3.9",
+    "PYTHONUNBUFFERED": "1"
   },
   "description": "名片管理 LINE Bot - 使用 Google Gemini AI 識別名片並存入 Notion",
   "tags": ["linebot", "ai", "notion", "gemini", "namecard"],

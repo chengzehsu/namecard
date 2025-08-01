@@ -292,27 +292,261 @@ HEROKU_API_KEY                 # Heroku 部署 API 金鑰 (傳統)
 # 3. 點擊 "Run workflow" 並輸入功能描述
 ```
 
-#### 3. Zeabur 自動部署使用
+#### 3. GitHub Actions 自動化部署工作流
+
+本專案包含多個 GitHub Actions 工作流文件，提供完整的 CI/CD 自動化：
+
+##### 📁 工作流文件結構
 ```bash
-# 自動部署 (推送到 main 分支)
-git push origin main                # 自動觸發部署
+.github/workflows/
+├── ci-cd.yml                 # 主要 CI/CD 流水線
+├── deploy-zeabur.yml         # Zeabur 部署自動化
+├── enhanced-testing.yml      # 增強測試套件
+└── integration-tests.yml     # 整合測試
+```
 
-# 手動部署
-# 1. 前往 GitHub Repository > Actions
-# 2. 選擇 "部署到 Zeabur" workflow
-# 3. 點擊 "Run workflow"
-# 4. 選擇環境 (production/staging)
-# 5. 可選擇是否強制部署 (跳過測試)
+##### 🔄 CI/CD 主流程 (ci-cd.yml)
+```bash
+觸發條件:
+- Push 到 main/develop 分支
+- Pull Request 創建/更新
+- 手動觸發
 
-# 獲取 Zeabur Token
-# 1. 前往 https://dash.zeabur.com/account/developer
-# 2. 生成新的 API Token
-# 3. 在 GitHub Secrets 中設置 ZEABUR_TOKEN
+執行步驟:
+1. 多版本測試 (Python 3.9, 3.10, 3.11)
+2. 代碼品質檢查 (flake8, black, isort)
+3. 安全掃描 (bandit, safety)
+4. 依賴漏洞檢查
+5. 應用健康檢查
+6. 模組導入測試
+```
 
-# 部署後更新 LINE Webhook
-# 1. 獲取部署 URL: https://your-app.zeabur.app
-# 2. 前往 LINE Developers Console
-# 3. 更新 Webhook URL: https://your-app.zeabur.app/callback
+##### 🚀 Zeabur 部署流程 (deploy-zeabur.yml)
+```bash
+自動部署:
+git push origin main  # 自動觸發 Zeabur 部署
+
+手動部署:
+1. GitHub Repository > Actions
+2. 選擇 "部署到 Zeabur" workflow
+3. 點擊 "Run workflow"
+4. 設置參數:
+   - environment: production/staging
+   - force_deploy: 跳過預檢查 (true/false)
+5. 執行部署
+
+CLI 觸發:
+gh workflow run "部署到 Zeabur" \
+  -f environment=production \
+  -f force_deploy=false
+```
+
+##### 🧪 測試自動化工作流
+```bash
+增強測試 (enhanced-testing.yml):
+- 深度代碼品質分析
+- 覆蓋率報告生成
+- 多環境測試矩陣
+- 效能基準測試
+
+整合測試 (integration-tests.yml):  
+- 端到端功能測試
+- API 接口測試
+- 模擬 Webhook 測試
+- 資料庫整合測試
+```
+
+##### ⚙️ 工作流設置和配置
+
+###### GitHub Secrets 完整清單
+```bash
+# 必要 API Keys
+LINE_CHANNEL_ACCESS_TOKEN      # LINE Bot API 權杖
+LINE_CHANNEL_SECRET            # LINE Bot 驗證密鑰
+GOOGLE_API_KEY                 # Google Gemini AI 主要 API
+GOOGLE_API_KEY_FALLBACK        # Google Gemini 備用 API
+NOTION_API_KEY                 # Notion 整合 API 金鑰
+NOTION_DATABASE_ID             # Notion 資料庫 ID
+
+# 部署相關
+ZEABUR_TOKEN                   # Zeabur 部署權杖 (推薦)
+RAILWAY_TOKEN                  # Railway 部署權杖 (備用)
+HEROKU_API_KEY                 # Heroku 部署 API (傳統)
+
+# 可選 AI 功能
+ANTHROPIC_API_KEY              # Claude AI API (Claude Code)
+OPENAI_API_KEY                 # OpenAI API 金鑰 (備用)
+```
+
+###### 環境變數配置
+```bash
+# 在 GitHub Actions 中自動設置的環境變數
+PYTHON_VERSION=3.9             # Python 版本
+FLASK_ENV=production           # Flask 環境
+PORT=5002                      # 應用端口
+GITHUB_TOKEN                   # 自動提供的 GitHub API 權杖
+```
+
+##### 📊 工作流監控和管理
+
+###### 1. GitHub Actions 介面監控
+```bash
+# 即時監控
+https://github.com/your-repo/actions
+
+# 工作流狀態
+✅ 成功 - 所有步驟完成
+❌ 失敗 - 某個步驟失敗
+🟡 進行中 - 正在執行
+⏸️ 已取消 - 手動或自動取消
+```
+
+###### 2. 使用 GitHub CLI 管理
+```bash
+# 安裝 GitHub CLI
+brew install gh                # macOS
+winget install GitHub.cli      # Windows
+apt install gh                 # Linux
+
+# 登入和設置
+gh auth login
+
+# 查看工作流狀態
+gh run list                    # 列出最近的運行
+gh run list --workflow="CI/CD" # 特定工作流
+gh run view [run-id]           # 查看詳細信息
+gh run view [run-id] --log     # 查看日誌
+
+# 手動觸發工作流
+gh workflow run "部署到 Zeabur"
+gh workflow run "CI/CD" --ref main
+
+# 取消運行中的工作流
+gh run cancel [run-id]
+
+# 重新運行失敗的工作流
+gh run rerun [run-id]
+```
+
+###### 3. 工作流狀態徽章
+```markdown
+# 在 README 中添加狀態徽章
+[![CI/CD](https://github.com/your-repo/namecard/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/your-repo/namecard/actions/workflows/ci-cd.yml)
+
+[![Deploy to Zeabur](https://github.com/your-repo/namecard/actions/workflows/deploy-zeabur.yml/badge.svg)](https://github.com/your-repo/namecard/actions/workflows/deploy-zeabur.yml)
+```
+
+##### 🔧 自定義工作流配置
+
+###### 觸發條件自定義
+```yaml
+# 僅在特定文件變更時觸發
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'app.py'
+      - '*.py'
+      - 'requirements.txt'
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+
+# 定時觸發 (每日健康檢查)
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 每日凌晨 2 點執行
+```
+
+###### 環境分支策略
+```yaml
+# 多環境部署
+environments:
+  production:
+    if: github.ref == 'refs/heads/main'
+  staging: 
+    if: github.ref == 'refs/heads/develop'
+  development:
+    if: github.ref == 'refs/heads/feature/*'
+```
+
+##### 🚨 常見工作流問題排查
+
+###### 1. 工作流執行失敗
+```bash
+# 檢查步驟
+1. 查看失敗的工作流日誌
+2. 檢查 GitHub Secrets 設置
+3. 確認 requirements.txt 依賴
+4. 驗證代碼語法正確性
+5. 檢查網路連接問題
+
+# 解決方法
+gh run view [failed-run-id] --log  # 查看詳細錯誤
+gh workflow run [workflow] --ref main  # 重新觸發
+```
+
+###### 2. Secrets 配置問題
+```bash
+# 檢查 Secrets 設置
+Repository > Settings > Secrets and variables > Actions
+
+# 常見問題
+- API Key 格式錯誤
+- Secret 名稱拼寫錯誤  
+- API Key 過期或無效
+- 權限不足
+
+# 驗證方法
+echo "ZEABUR_TOKEN 長度: ${#ZEABUR_TOKEN}"
+echo "API Key 前6位: ${GOOGLE_API_KEY:0:6}"
+```
+
+###### 3. 部署權限問題
+```bash
+# Zeabur Token 權限
+- 確保 Token 有專案存取權限
+- 檢查 Token 是否過期
+- 驗證專案名稱正確
+
+# GitHub Actions 權限
+- Repository > Settings > Actions > General
+- 確保 "Read and write permissions" 已啟用
+- 檢查 "Allow GitHub Actions to create and approve pull requests"
+```
+
+##### 📈 工作流效能優化
+
+###### 1. 快取設置
+```yaml
+# Python 依賴快取
+- uses: actions/cache@v3
+  with:
+    path: ~/.cache/pip
+    key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+
+# Node.js 快取 (如適用)
+- uses: actions/cache@v3  
+  with:
+    path: ~/.npm
+    key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+```
+
+###### 2. 並行執行
+```yaml
+# 多任務並行執行
+strategy:
+  matrix:
+    python-version: [3.9, 3.10, 3.11]
+    os: [ubuntu-latest, windows-latest, macos-latest]
+  fail-fast: false  # 一個失敗不影響其他
+```
+
+###### 3. 條件執行
+```yaml
+# 僅在變更時執行測試
+if: contains(github.event.head_commit.message, '[test]') || 
+    github.event_name == 'pull_request'
 ```
 
 ### Notion 資料庫欄位設定
@@ -341,29 +575,289 @@ ngrok http 5002
 
 ### 🌐 Zeabur 雲端部署 (推薦)
 
-#### 自動部署 (GitHub Actions)
-- **觸發條件**: 推送到 main 分支自動部署
+Zeabur 是一個現代化的雲端部署平台，提供簡單易用的應用部署服務。我們整合了完整的 GitHub Actions 自動化部署流程。
+
+#### 🚀 自動部署流程 (GitHub Actions)
+
+**文件位置**: `.github/workflows/deploy-zeabur.yml`
+
+**觸發條件**:
+- **自動觸發**: 推送代碼到 `main` 分支時自動部署
 - **手動觸發**: GitHub Actions > "部署到 Zeabur" > Run workflow
-- **部署 URL**: 自動生成，格式 `https://namecard-app-xxx.zeabur.app`
+- **智能過濾**: 只有實際代碼變更才觸發部署（忽略文檔變更）
 
-#### Zeabur 配置要求
-```bash
-# GitHub Secrets 中需要設置
-ZEABUR_TOKEN=your_zeabur_token_here
+**部署流程**:
+```
+1. 預部署檢查 (可選跳過)
+   ├── 語法檢查 (Python 編譯)
+   ├── 核心模組驗證
+   └── 必要文件檢查
 
-# Zeabur Dashboard 獲取 Token
-# https://dash.zeabur.com/account/developer
+2. Zeabur 部署
+   ├── 安裝 Zeabur CLI
+   ├── 配置認證
+   ├── 創建部署配置
+   ├── 專案/服務管理
+   └── 環境變數設置
+
+3. 健康檢查
+   ├── 等待服務啟動
+   ├── 端點連通性測試
+   └── 部署狀態驗證
+
+4. 部署後測試
+   ├── 健康檢查端點測試
+   ├── Webhook 端點測試
+   └── 結果通知
 ```
 
-#### 部署後設置
-1. **更新 LINE Webhook URL**
-   - 前往 [LINE Developers Console](https://developers.line.biz/console/)
-   - 更新 Webhook URL 為: `https://your-app.zeabur.app/callback`
-   - 啟用 "Use webhook"
+#### 🔧 Zeabur 配置設置
 
-2. **驗證部署**
-   - 健康檢查: `https://your-app.zeabur.app/health`
-   - 服務測試: `https://your-app.zeabur.app/test`
+##### 1. 獲取 Zeabur Token
+```bash
+# 步驟
+1. 前往 https://dash.zeabur.com/account/developer
+2. 生成新的 API Token
+3. 複製 Token 值
+4. 在 GitHub Repository Settings > Secrets and variables > Actions
+5. 新增 Secret: ZEABUR_TOKEN = your_token_here
+```
+
+##### 2. GitHub Secrets 配置
+```bash
+# 必要 Secrets (用於 Zeabur 部署)
+ZEABUR_TOKEN                   # Zeabur 部署權杖 (必須)
+LINE_CHANNEL_ACCESS_TOKEN      # LINE Bot API 權杖
+LINE_CHANNEL_SECRET            # LINE Bot 驗證密鑰  
+GOOGLE_API_KEY                 # Google Gemini AI API 金鑰 (主要)
+GOOGLE_API_KEY_FALLBACK        # Google Gemini AI API 金鑰 (備用)
+NOTION_API_KEY                 # Notion 整合 API 金鑰
+NOTION_DATABASE_ID             # Notion 資料庫 ID
+```
+
+##### 3. 部署配置詳情
+```json
+{
+  "name": "namecard-line-bot",
+  "type": "python",
+  "buildCommand": "pip install -r requirements.txt",
+  "startCommand": "python app.py",
+  "environment": {
+    "PYTHON_VERSION": "3.9",
+    "PORT": "5002"
+  },
+  "regions": ["hkg"],
+  "scaling": {
+    "minInstances": 1,
+    "maxInstances": 2
+  }
+}
+```
+
+#### 📱 手動部署操作
+
+##### 方法 1: 自動部署 (推薦)
+```bash
+# 簡單推送即可觸發部署
+git add .
+git commit -m "feat: 新功能更新"
+git push origin main
+# → 自動觸發部署流程
+```
+
+##### 方法 2: 手動觸發部署
+```bash
+# 在 GitHub 介面操作
+1. 前往 GitHub Repository > Actions
+2. 選擇 "部署到 Zeabur" workflow
+3. 點擊 "Run workflow"
+4. 選擇部署參數:
+   - environment: production/staging
+   - force_deploy: 是否跳過預檢查
+5. 點擊 "Run workflow" 執行
+```
+
+##### 方法 3: 使用 GitHub CLI
+```bash
+# 安裝 GitHub CLI
+brew install gh  # macOS
+# 或訪問 https://cli.github.com/
+
+# 登入 GitHub
+gh auth login
+
+# 觸發部署
+gh workflow run "部署到 Zeabur" \
+  -f environment=production \
+  -f force_deploy=false
+
+# 查看部署狀態
+gh run list --workflow="部署到 Zeabur"
+gh run view [run-id] --log
+```
+
+#### 🔍 部署狀態監控
+
+##### 1. GitHub Actions 監控
+```bash
+# 實時查看部署進度
+https://github.com/your-repo/actions
+
+# 部署日誌查看
+- 點擊最新的 "部署到 Zeabur" workflow run
+- 查看各個步驟的詳細日誌
+- 監控部署進度和錯誤信息
+```
+
+##### 2. Zeabur Dashboard 監控
+```bash
+# Zeabur 控制台
+https://dash.zeabur.com/
+
+# 專案信息
+- 專案名稱: namecard-line-bot
+- 服務名稱: namecard-app
+- 部署區域: 香港 (hkg)
+- 實例配置: 1-2 個實例自動擴展
+```
+
+##### 3. 應用健康監控
+```bash
+# 自動健康檢查端點
+https://your-app.zeabur.app/health
+
+# 測試端點
+https://your-app.zeabur.app/test
+
+# LINE Webhook 端點
+https://your-app.zeabur.app/callback
+```
+
+#### 🔧 部署後配置
+
+##### 1. 更新 LINE Webhook URL
+```bash
+# 步驟詳情
+1. 獲取部署 URL (從 GitHub Actions 日誌中)
+   格式: https://namecard-line-bot-xxx.zeabur.app
+
+2. 前往 LINE Developers Console
+   https://developers.line.biz/console/
+
+3. 選擇您的 LINE Bot Channel
+
+4. 前往 "Messaging API" 標籤頁
+
+5. 更新 Webhook URL:
+   新 URL: https://your-app.zeabur.app/callback
+
+6. 啟用 "Use webhook" 選項
+
+7. 點擊 "Verify" 測試連接
+
+8. 確認狀態顯示為 "Success"
+```
+
+##### 2. 驗證部署成功
+```bash
+# 健康檢查
+curl https://your-app.zeabur.app/health
+# 應該返回: {"status": "healthy", "timestamp": "..."}
+
+# 服務測試
+curl https://your-app.zeabur.app/test
+# 應該返回: {"message": "名片管理 LINE Bot 運行中", ...}
+
+# Webhook 端點測試
+curl -X POST https://your-app.zeabur.app/callback
+# 應該返回 400 (正常，因為沒有提供正確的 LINE 簽名)
+```
+
+##### 3. LINE Bot 功能測試
+```bash
+# 測試流程
+1. 在 LINE 中搜尋並添加您的 Bot
+2. 發送 "help" 測試基本響應
+3. 發送名片圖片測試 AI 識別功能
+4. 檢查 Notion 資料庫是否正確存儲
+5. 測試批次處理模式
+```
+
+#### ⚠️ 常見問題排查
+
+##### 1. 部署失敗
+```bash
+# 檢查事項
+✅ ZEABUR_TOKEN 是否正確設置
+✅ GitHub Secrets 中的 API Keys 是否齊全
+✅ requirements.txt 是否包含所有依賴
+✅ app.py 語法是否正確
+✅ 網路連接是否正常
+
+# 解決方法
+1. 檢查 GitHub Actions 錯誤日誌
+2. 確認 Zeabur Token 有效性
+3. 手動觸發部署並啟用 force_deploy
+4. 聯繫 Zeabur 技術支援
+```
+
+##### 2. 健康檢查失敗
+```bash
+# 可能原因
+- 應用啟動時間過長
+- 環境變數配置錯誤
+- 依賴安裝失敗
+- 端口配置問題
+
+# 解決方法
+1. 查看 Zeabur Dashboard 的應用日誌
+2. 檢查環境變數是否正確設置
+3. 確認 Flask 應用監聽正確端口 (5002)
+4. 等待更長時間讓應用完全啟動
+```
+
+##### 3. LINE Webhook 連接失敗
+```bash
+# 檢查事項
+✅ Webhook URL 格式正確
+✅ SSL 證書有效 (Zeabur 自動提供)
+✅ 應用正常運行
+✅ LINE_CHANNEL_SECRET 設置正確
+
+# 測試方法
+curl -X POST https://your-app.zeabur.app/callback \
+  -H "Content-Type: application/json" \
+  -d '{"events":[]}'
+```
+
+#### 📊 部署效能指標
+
+- **部署時間**: 通常 3-5 分鐘
+- **啟動時間**: 30-60 秒
+- **可用性**: 99.9% SLA
+- **自動擴展**: 1-2 實例根據負載
+- **區域**: 香港 (hkg) 低延遲
+- **SSL**: 自動 HTTPS 證書
+- **監控**: 內建應用監控和日誌
+
+#### 🔄 版本管理和回滾
+
+```bash
+# 版本標籤 (可選)
+git tag -a v1.0.0 -m "正式版本 v1.0.0"
+git push origin v1.0.0
+
+# 回滾到前一版本 (在 Zeabur Dashboard)
+1. 前往 Zeabur Dashboard
+2. 選擇專案和服務
+3. 在 "Deployments" 標籤查看部署歷史
+4. 選擇之前的部署版本
+5. 點擊 "Rollback" 回滾
+
+# 緊急回滾 (透過 Git)
+git revert HEAD
+git push origin main  # 觸發新的部署
+```
 
 ### 🔧 其他部署選項
 

@@ -1,10 +1,13 @@
+import sys
+import logging
+import os
+from datetime import datetime
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
     MessageEvent, TextMessage, ImageMessage, TextSendMessage
 )
-import requests
 from config import Config
 from name_card_processor import NameCardProcessor
 from notion_manager import NotionManager
@@ -16,17 +19,40 @@ from user_interaction_handler import UserInteractionHandler
 # 初始化 Flask 應用
 app = Flask(__name__)
 
-# 驗證配置
+# 配置日誌輸出（確保 Zeabur 可以捕獲日誌）
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.StreamHandler(sys.stderr)
+    ]
+)
+
+# 設置 Flask 應用日誌
+app.logger.setLevel(logging.INFO)
+app.logger.addHandler(logging.StreamHandler(sys.stdout))
+
+# 強制輸出到 stdout（Zeabur 日誌捕獲）
+def log_message(message, level="INFO"):
+    """統一日誌輸出函數"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_line = f"[{timestamp}] {level}: {message}"
+    print(log_line, flush=True)  # 強制刷新輸出
+    sys.stdout.flush()
+    return log_line
+
+# 驗證配置（使用新的日誌函數）
 try:
     Config.validate_config()
-    print("✅ 配置驗證成功")
+    log_message("✅ 配置驗證成功")
 except ValueError as e:
-    print(f"❌ 配置錯誤: {e}")
+    log_message(f"❌ 配置錯誤: {e}", "ERROR")
     exit(1)
 
 # 初始化 LINE Bot
 if not Config.LINE_CHANNEL_ACCESS_TOKEN or not Config.LINE_CHANNEL_SECRET:
-    print("❌ LINE Bot 配置不完整")
+    log_message("❌ LINE Bot 配置不完整", "ERROR")
     exit(1)
 
 line_bot_api = LineBotApi(Config.LINE_CHANNEL_ACCESS_TOKEN)
@@ -49,48 +75,48 @@ except Exception as e:
 def callback():
     """LINE Bot webhook 回調函數 - 嚴格按照 LINE API 規範"""
     
-    # 記錄請求資訊
-    print(f"📥 收到 POST 請求到 /callback")
-    print(f"📋 Request headers: {dict(request.headers)}")
-    print(f"🌍 Remote addr: {request.environ.get('REMOTE_ADDR', 'unknown')}")
-    print(f"🔍 User agent: {request.headers.get('User-Agent', 'unknown')}")
+    # 記錄請求資訊（使用統一日誌函數）
+    log_message(f"📥 收到 POST 請求到 /callback")
+    log_message(f"📋 Request headers: {dict(request.headers)}")
+    log_message(f"🌍 Remote addr: {request.environ.get('REMOTE_ADDR', 'unknown')}")
+    log_message(f"🔍 User agent: {request.headers.get('User-Agent', 'unknown')}")
     
     # 1. 檢查 Content-Type（LINE 要求 application/json）
     content_type = request.headers.get('Content-Type', '')
     if not content_type.startswith('application/json'):
-        print(f"❌ 錯誤的 Content-Type: {content_type}")
+        log_message(f"❌ 錯誤的 Content-Type: {content_type}", "ERROR")
         return 'Content-Type must be application/json', 400
     
     # 2. 獲取 X-Line-Signature header（必須）
     signature = request.headers.get('X-Line-Signature')
     if not signature:
-        print("❌ 缺少必要的 X-Line-Signature header")
+        log_message("❌ 缺少必要的 X-Line-Signature header", "ERROR")
         return 'Missing X-Line-Signature header', 400
     
     # 3. 獲取請求體
     body = request.get_data(as_text=True)
     if not body:
-        print("❌ 空的請求體")
+        log_message("❌ 空的請求體", "ERROR")
         return 'Empty request body', 400
         
-    print(f"📄 Request body length: {len(body)}")
-    print(f"📄 Request body preview: {body[:200]}...")
+    log_message(f"📄 Request body length: {len(body)}")
+    log_message(f"📄 Request body preview: {body[:200]}...")
     
     # 4. 驗證簽名並處理 webhook
     try:
         handler.handle(body, signature)
-        print("✅ Webhook 處理成功")
+        log_message("✅ Webhook 處理成功")
         
         # LINE API 要求返回 200 狀態碼
         return 'OK', 200
         
     except InvalidSignatureError as e:
-        print(f"❌ 簽名驗證失敗: {e}")
-        print(f"🔑 使用的 Channel Secret: {Config.LINE_CHANNEL_SECRET[:10]}...")
+        log_message(f"❌ 簽名驗證失敗: {e}", "ERROR")
+        log_message(f"🔑 使用的 Channel Secret: {Config.LINE_CHANNEL_SECRET[:10]}...", "ERROR")
         abort(400)
         
     except Exception as e:
-        print(f"❌ Webhook 處理過程中發生錯誤: {e}")
+        log_message(f"❌ Webhook 處理過程中發生錯誤: {e}", "ERROR")
         import traceback
         traceback.print_exc()
         abort(500)
@@ -253,8 +279,9 @@ def handle_text_message(event):
                     TextSendMessage(text=choice_result["message"])
                 )
                 
-                # 異步處理多張名片
-                _process_multiple_cards_async(user_id, cards_to_process, is_batch_mode)
+                # 異步處理多張名片（檢查批次模式狀態）
+                user_is_batch_mode = batch_manager.is_in_batch_mode(user_id)
+                _process_multiple_cards_async(user_id, cards_to_process, user_is_batch_mode)
             
             else:
                 # 其他狀況（無效選擇、會話過期等）
@@ -387,7 +414,7 @@ def test_services():
     # 測試 Gemini (簡單檢查)
     try:
         # 檢查是否能創建處理器實例
-        test_processor = NameCardProcessor()
+        NameCardProcessor()
         results['gemini'] = {"success": True, "message": "Gemini 連接正常"}
     except Exception as e:
         results['gemini'] = {"success": False, "error": str(e)}
@@ -490,7 +517,6 @@ def _process_single_card_from_multi_format(user_id: str, card_data: dict, is_bat
 def _process_multiple_cards_async(user_id: str, cards_to_process: list, is_batch_mode: bool):
     """異步處理多張名片"""
     try:
-        total_cards = len(cards_to_process)
         success_count = 0
         failed_count = 0
         results = []
@@ -575,11 +601,22 @@ def _process_multiple_cards_async(user_id: str, cards_to_process: list, is_batch
         )
 
 if __name__ == "__main__":
-    print("🚀 啟動 LINE Bot 名片管理系統...")
-    print("📋 使用 Notion 作為資料庫")
-    print("🤖 使用 Google Gemini AI 識別名片 + 多名片檢測")
-    print("🎯 支援品質評估和用戶交互選擇")
-    print("⚡ 服務已就緒！")
+    # 使用統一日誌輸出
+    log_message("🚀 啟動 LINE Bot 名片管理系統...")
+    log_message("📋 使用 Notion 作為資料庫")
+    log_message("🤖 使用 Google Gemini AI 識別名片 + 多名片檢測")
+    log_message("🎯 支援品質評估和用戶交互選擇")
     
-    # 在開發環境中運行
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    # 獲取端口配置（支援 Zeabur/Railway 等雲端平台）
+    port = int(os.environ.get("PORT", 5002))
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    
+    log_message(f"⚡ 服務啟動中... 端口: {port}, Debug: {debug_mode}")
+    
+    # 生產環境配置
+    app.run(
+        host='0.0.0.0', 
+        port=port, 
+        debug=debug_mode,
+        use_reloader=False  # 在生產環境中關閉重載器
+    )
