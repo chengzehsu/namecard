@@ -35,9 +35,11 @@ namecard/
 ├── pr_creator.py                   # PR 自動創建功能
 ├── test_new_webhook.py             # Webhook 測試工具
 ├── test_address_normalizer.py      # 地址正規化測試 (NEW)
+├── format_code.sh                  # 代碼格式化腳本 (NEW) 🆕
+├── .pre-commit-config.yaml         # Pre-commit hooks 配置 (NEW) 🆕
 ├── .github/
 │   └── workflows/
-│       ├── ci-cd.yml               # CI/CD 自動化流程
+│       ├── ci-cd.yml               # CI/CD 自動化流程 (含自動格式化) 🆕
 │       └── claude-code.yml         # Claude Code AI 自動化
 ├── requirements.txt                # Python 依賴列表
 ├── Procfile                        # Heroku 部署配置
@@ -135,14 +137,21 @@ namecard/
 
 ## 🤖 GitHub Actions 自動化
 
-### CI/CD Pipeline (.github/workflows/ci-cd.yml)
+### CI/CD Pipeline (.github/workflows/ci-cd.yml) 🆕
 - **觸發條件**: Push 到 main/develop 分支，Pull Request 創建
 - **執行步驟**:
   1. **多版本測試**: Python 3.9, 3.10, 3.11
-  2. **代碼品質檢查**: flake8, black, isort
-  3. **安全掃描**: bandit, safety
-  4. **應用健康檢查**: 模組導入測試，Flask 應用驗證
-  5. **建構檢查**: 部署文件驗證
+  2. **🔧 自動代碼格式化**: black + isort 自動修復並推送 🆕
+  3. **代碼品質檢查**: flake8, black, isort (驗證性)
+  4. **安全掃描**: bandit, safety
+  5. **應用健康檢查**: 模組導入測試，Flask 應用驗證
+  6. **建構檢查**: 部署文件驗證
+
+#### 🚀 自動格式化功能 🆕
+- **自動修復**: CI/CD 會自動運行 `black` 和 `isort` 修復格式問題
+- **自動提交**: 格式修復會自動提交並推送到原分支
+- **零干擾**: 開發者無需手動處理格式化問題
+- **一致性**: 確保整個專案的代碼風格統一
 
 ### Claude Code AI 自動化 (.github/workflows/claude-code.yml)
 - **觸發條件**:
@@ -970,9 +979,15 @@ python3 test_address_normalizer.py   # 地址正規化測試
 python3 test_multi_card_processor.py # 多名片系統測試 🆕
 python3 test_api_fallback.py         # API 備用機制測試 🆕
 
-# 代碼格式化
+# 代碼格式化 🆕
+./format_code.sh                    # 一鍵格式化腳本 (推薦)
 black .                             # 自動格式化
 isort .                             # 自動排序 imports
+
+# Pre-commit hooks (推薦)
+pip install pre-commit              # 安裝 pre-commit
+pre-commit install                  # 安裝 Git hooks
+pre-commit run --all-files          # 手動運行所有檢查
 
 # 本地開發
 python app.py                       # 啟動應用
@@ -981,7 +996,7 @@ ngrok http 5002                     # 建立隧道 (開發用)
 # Git 流程
 git add .
 git commit -m "feat: 新功能"
-git push origin main                # 觸發 CI/CD
+git push origin main                # 觸發 CI/CD (會自動格式化)
 
 # 部署
 ./deploy.sh                         # 執行部署腳本 (如果有)

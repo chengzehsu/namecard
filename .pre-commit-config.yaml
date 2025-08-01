@@ -1,0 +1,38 @@
+# Pre-commit hooks 配置
+# 使用方法: pip install pre-commit && pre-commit install
+# 手動運行: pre-commit run --all-files
+
+repos:
+  # Black - Python 代碼格式化
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3
+        exclude: ^(\.venv|venv|env|__pycache__|\.git)/
+        
+  # isort - Import 排序
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile, black]
+        exclude: ^(\.venv|venv|env|__pycache__|\.git)/
+        
+  # Flake8 - 代碼品質檢查
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        args: [--max-line-length=88, --extend-ignore=E203,W503]
+        exclude: ^(\.venv|venv|env|__pycache__|\.git)/
+        
+  # 基本檢查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
