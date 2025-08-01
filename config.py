@@ -12,6 +12,7 @@ class Config:
 
     # Google Gemini API 設定
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    GOOGLE_API_KEY_FALLBACK = os.getenv("GOOGLE_API_KEY_FALLBACK")
     GEMINI_MODEL = "gemini-2.5-pro"
 
     # Notion API 設定

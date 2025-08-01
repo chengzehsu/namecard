@@ -1,19 +1,17 @@
-from flask import Flask, abort, request
+from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
-    FollowEvent,
-    ImageMessage,
-    MessageEvent,
-    TextMessage,
-    TextSendMessage,
+    MessageEvent, TextMessage, ImageMessage, TextSendMessage
 )
-
-from batch_manager import BatchManager
+import requests
 from config import Config
 from name_card_processor import NameCardProcessor
 from notion_manager import NotionManager
+from batch_manager import BatchManager
 from pr_creator import PRCreator
+from multi_card_processor import MultiCardProcessor
+from user_interaction_handler import UserInteractionHandler
 
 # 初始化 Flask 應用
 app = Flask(__name__)
@@ -40,93 +38,92 @@ try:
     notion_manager = NotionManager()
     batch_manager = BatchManager()
     pr_creator = PRCreator()
+    multi_card_processor = MultiCardProcessor()
+    user_interaction_handler = UserInteractionHandler()
     print("✅ 處理器初始化成功")
 except Exception as e:
     print(f"❌ 處理器初始化失敗: {e}")
     exit(1)
 
-
-@app.route("/callback", methods=["POST"])
+@app.route("/callback", methods=['POST'])
 def callback():
     """LINE Bot webhook 回調函數 - 嚴格按照 LINE API 規範"""
-
+    
     # 記錄請求資訊
-    print("📥 收到 POST 請求到 /callback")
+    print(f"📥 收到 POST 請求到 /callback")
     print(f"📋 Request headers: {dict(request.headers)}")
     print(f"🌍 Remote addr: {request.environ.get('REMOTE_ADDR', 'unknown')}")
     print(f"🔍 User agent: {request.headers.get('User-Agent', 'unknown')}")
-
+    
     # 1. 檢查 Content-Type（LINE 要求 application/json）
-    content_type = request.headers.get("Content-Type", "")
-    if not content_type.startswith("application/json"):
+    content_type = request.headers.get('Content-Type', '')
+    if not content_type.startswith('application/json'):
         print(f"❌ 錯誤的 Content-Type: {content_type}")
-        return "Content-Type must be application/json", 400
-
+        return 'Content-Type must be application/json', 400
+    
     # 2. 獲取 X-Line-Signature header（必須）
-    signature = request.headers.get("X-Line-Signature")
+    signature = request.headers.get('X-Line-Signature')
     if not signature:
         print("❌ 缺少必要的 X-Line-Signature header")
-        return "Missing X-Line-Signature header", 400
-
+        return 'Missing X-Line-Signature header', 400
+    
     # 3. 獲取請求體
     body = request.get_data(as_text=True)
     if not body:
         print("❌ 空的請求體")
-        return "Empty request body", 400
-
+        return 'Empty request body', 400
+        
     print(f"📄 Request body length: {len(body)}")
     print(f"📄 Request body preview: {body[:200]}...")
-
+    
     # 4. 驗證簽名並處理 webhook
     try:
         handler.handle(body, signature)
         print("✅ Webhook 處理成功")
-
+        
         # LINE API 要求返回 200 狀態碼
-        return "OK", 200
-
+        return 'OK', 200
+        
     except InvalidSignatureError as e:
         print(f"❌ 簽名驗證失敗: {e}")
         print(f"🔑 使用的 Channel Secret: {Config.LINE_CHANNEL_SECRET[:10]}...")
         abort(400)
-
+        
     except Exception as e:
         print(f"❌ Webhook 處理過程中發生錯誤: {e}")
         import traceback
-
         traceback.print_exc()
         abort(500)
 
-
 # 為了解決 ngrok 免費版的問題，添加一個簡單的 GET 端點
-@app.route("/callback", methods=["GET"])
+@app.route("/callback", methods=['GET'])
 def callback_info():
     """顯示 callback 端點資訊"""
     return {
-        "message": "LINE Bot webhook endpoint",
+        "message": "LINE Bot webhook endpoint", 
         "method": "POST only",
-        "status": "ready",
+        "status": "ready"
     }
-
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text_message(event):
     """處理文字訊息"""
     user_message = event.message.text.strip()
     user_id = event.source.user_id
-
+    
     # 批次模式指令處理
-    if user_message.lower() in ["批次", "batch", "批次模式", "開始批次"]:
+    if user_message.lower() in ['批次', 'batch', '批次模式', '開始批次']:
         result = batch_manager.start_batch_mode(user_id)
         line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(text=result["message"])
+            event.reply_token,
+            TextSendMessage(text=result['message'])
         )
         return
-
-    elif user_message.lower() in ["結束批次", "end batch", "完成批次", "批次結束"]:
+    
+    elif user_message.lower() in ['結束批次', 'end batch', '完成批次', '批次結束']:
         result = batch_manager.end_batch_mode(user_id)
-        if result["success"]:
-            stats = result["statistics"]
+        if result['success']:
+            stats = result['statistics']
             summary_text = f"""📊 **批次處理完成**
 
 ✅ **處理成功:** {stats['total_processed']} 張
@@ -134,366 +131,455 @@ def handle_text_message(event):
 ⏱️ **總耗時:** {stats['total_time_minutes']:.1f} 分鐘
 
 📋 **成功處理的名片:**"""
-
-            for card in stats["processed_cards"]:
+            
+            for card in stats['processed_cards']:
                 summary_text += f"\n• {card['name']} ({card['company']})"
-
-            if stats["failed_cards"]:
-                summary_text += "\n\n❌ **失敗記錄:**"
-                for i, failed in enumerate(stats["failed_cards"], 1):
+            
+            if stats['failed_cards']:
+                summary_text += f"\n\n❌ **失敗記錄:**"
+                for i, failed in enumerate(stats['failed_cards'], 1):
                     summary_text += f"\n{i}. {failed['error'][:50]}..."
-
+            
             line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=summary_text)
-            )
-        else:
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=result["message"])
-            )
-        return
-
-    elif user_message.lower() in ["狀態", "status", "批次狀態"]:
-        if batch_manager.is_in_batch_mode(user_id):
-            progress_msg = batch_manager.get_batch_progress_message(user_id)
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=progress_msg)
+                event.reply_token,
+                TextSendMessage(text=summary_text)
             )
         else:
             line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(
-                    text="您目前不在批次模式中。發送「批次」開始批次處理。"
-                ),
+                TextSendMessage(text=result['message'])
             )
         return
-
-    elif user_message.lower() in ["help", "幫助", "說明"]:
-        help_text = """🤖 名片管理 LINE Bot - 完整使用指南
+    
+    elif user_message.lower() in ['狀態', 'status', '批次狀態']:
+        if batch_manager.is_in_batch_mode(user_id):
+            progress_msg = batch_manager.get_batch_progress_message(user_id)
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=progress_msg)
+            )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="您目前不在批次模式中。發送「批次」開始批次處理。")
+            )
+        return
+        
+    elif user_message.lower() in ['help', '幫助', '說明']:
+        help_text = """🤖 名片管理 LINE Bot 使用說明
 
 📸 **單張名片處理**
-• 直接傳送名片照片給我
-• 我會自動識別名片資訊並存入 Notion
-• 支援中文、英文名片
+- 直接傳送名片照片給我
+- 我會自動識別名片資訊並存入 Notion
 
-🔄 **批次處理模式（推薦！）**
-• 發送「批次」進入批次模式
-• 連續發送多張名片圖片，省時高效
-• 發送「結束批次」查看統計結果
-• 發送「狀態」查看當前進度
-• 非常適合展會、會議後大量名片處理
+🔄 **批次處理模式**
+- 發送「批次」進入批次模式
+- 連續發送多張名片圖片
+- 發送「結束批次」查看處理結果
+- 發送「狀態」查看當前進度
 
-🚀 **即時 PR 創建**
-• 發送「create pr: 您的需求描述」
-• 例如：create pr: 添加用戶登入功能
-• 系統會自動生成完整 PR
+💡 **功能特色:**
+- 使用 Google Gemini AI 識別文字
+- 自動整理聯絡資訊
+- 直接存入 Notion 資料庫
+- 支援中英文名片
+- 支援批次處理多張名片
 
-⚡ **智能特色:**
-• Google Gemini AI 精準識別
-• 自動整理完整聯絡資訊
-• 直接存入 Notion 資料庫
-• 支援多種圖片格式
-• 批次處理統計報告
-• 自動化 PR 創建
-
-💡 **使用技巧:**
-• 確保名片照片清晰可見
-• 批次模式可大幅提升處理效率
-• 處理完成後會自動生成 Notion 頁面連結
-
-❓ **需要協助隨時輸入「help」**"""
-
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=help_text))
-
-    elif user_message.lower().startswith(
-        "create pr:"
-    ) or user_message.lower().startswith("pr:"):
+❓ 需要幫助請輸入 "help" """
+        
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=help_text)
+        )
+        
+    elif user_message.lower().startswith('create pr:') or user_message.lower().startswith('pr:'):
         # Extract PR description
-        pr_description = user_message[user_message.find(":") + 1 :].strip()
-
+        pr_description = user_message[user_message.find(':')+1:].strip()
+        
         if not pr_description:
             reply_text = "請提供 PR 描述，例如：create pr: 添加用戶登入功能"
             line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text=reply_text)
+                event.reply_token,
+                TextSendMessage(text=reply_text)
             )
         else:
             # Send processing message
             line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text="🚀 正在創建 PR，請稍候...")
+                event.reply_token,
+                TextSendMessage(text="🚀 正在創建 PR，請稍候...")
             )
-
+            
             # Create PR
             result = pr_creator.create_instant_pr(pr_description)
-
-            if result["success"]:
+            
+            if result['success']:
                 success_msg = f"""✅ PR 創建成功！
-
+                
 🔗 **PR URL:** {result['pr_url']}
-🌿 **分支:** {result['branch_name']}
+🌿 **分支:** {result['branch_name']} 
 📝 **變更數量:** {result['changes_applied']}
 
 💡 請檢查 GitHub 查看完整的 PR 內容"""
-
+                
                 line_bot_api.push_message(
-                    event.source.user_id, TextSendMessage(text=success_msg)
+                    event.source.user_id,
+                    TextSendMessage(text=success_msg)
                 )
             else:
                 error_msg = f"❌ PR 創建失敗: {result['error']}"
                 line_bot_api.push_message(
-                    event.source.user_id, TextSendMessage(text=error_msg)
+                    event.source.user_id,
+                    TextSendMessage(text=error_msg)
                 )
         return
-
+        
     else:
+        # 檢查是否有待處理的多名片會話
+        if user_interaction_handler.has_pending_session(user_id):
+            # 處理多名片選擇
+            choice_result = user_interaction_handler.handle_user_choice(user_id, user_message)
+            
+            if choice_result["action"] == "retake_photo":
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=choice_result["message"])
+                )
+            
+            elif choice_result["action"] in ["process_all_cards", "process_selected_cards"]:
+                # 處理選擇的名片
+                cards_to_process = choice_result.get("cards_to_process", [])
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=choice_result["message"])
+                )
+                
+                # 異步處理多張名片
+                _process_multiple_cards_async(user_id, cards_to_process, is_batch_mode)
+            
+            else:
+                # 其他狀況（無效選擇、會話過期等）
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=choice_result["message"])
+                )
+        
         # 檢查是否在批次模式中
-        if batch_manager.is_in_batch_mode(user_id):
+        elif batch_manager.is_in_batch_mode(user_id):
             progress_msg = batch_manager.get_batch_progress_message(user_id)
             reply_text = f"您目前在批次模式中，請發送名片圖片。\n\n{progress_msg}"
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=reply_text)
+            )
         else:
-            reply_text = """📸 請上傳您的名片照片，我來幫您智能識別！
-
-💡 **小提示：**
-• 單張處理：直接傳送圖片即可
-• 批次處理：先發送「批次」再連續上傳多張
-• 需要幫助：發送「help」查看完整指南
-
-🚀 準備好了嗎？上傳您的名片吧！"""
-
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-
-
-@handler.add(FollowEvent)
-def handle_follow_event(event):
-    """處理用戶關注/加入事件 - 歡迎新用戶並提供指引"""
-    user_id = event.source.user_id
-
-    # 簡化歡迎訊息 - 分階段引導用戶體驗
-    welcome_message = """🎉 **歡迎使用 AI 名片管理助手！**
-
-👋 我可以幫您自動識別名片並存入 Notion 資料庫！
-
-🚀 **立即體驗：**
-📸 上傳一張名片照片，看看我的識別能力！
-
-💡 **更多功能：**
-• 「help」- 查看完整功能說明
-• 「批次」- 處理多張名片更高效
-
-✨ 使用 Google Gemini AI，識別準確率 90%+"""
-
-    try:
-        line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(text=welcome_message)
-        )
-        print(f"✅ 歡迎新用戶: {user_id}")
-    except Exception as e:
-        print(f"❌ 發送歡迎訊息失敗: {e}")
-
+            reply_text = "請上傳名片圖片，我會幫您識別並存入 Notion 📸\n\n💡 提示：發送「批次」可開啟批次處理模式"
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=reply_text)
+            )
 
 @handler.add(MessageEvent, message=ImageMessage)
 def handle_image_message(event):
     """處理圖片訊息 - 名片識別（支援批次模式）"""
     user_id = event.source.user_id
     is_batch_mode = batch_manager.is_in_batch_mode(user_id)
-
+    
     try:
         # 更新用戶活動時間
         if is_batch_mode:
             batch_manager.update_activity(user_id)
-
+        
         # 發送處理中訊息
         if is_batch_mode:
             session_info = batch_manager.get_session_info(user_id)
-            current_count = session_info["total_count"] + 1 if session_info else 1
-            processing_message = (
-                f"📸 批次模式 - 正在處理第 {current_count} 張名片，請稍候..."
-            )
+            current_count = session_info['total_count'] + 1 if session_info else 1
+            processing_message = f"📸 批次模式 - 正在處理第 {current_count} 張名片，請稍候..."
         else:
             processing_message = "📸 收到名片圖片！正在使用 AI 識別中，請稍候..."
-
+            
         line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(text=processing_message)
+            event.reply_token,
+            TextSendMessage(text=processing_message)
         )
-
-        # 下載圖片 (加入重試機制)
-        import time
-
-        max_retries = 3
-        retry_delay = 2
-
-        for attempt in range(max_retries):
-            try:
-                message_content = line_bot_api.get_message_content(event.message.id)
-                image_bytes = b""
-                for chunk in message_content.iter_content():
-                    image_bytes += chunk
-                break  # 成功時跳出重試循環
-            except Exception as e:
-                if attempt == max_retries - 1:  # 最後一次重試失敗
-                    raise e
-                print(f"⚠️ 第 {attempt + 1} 次獲取圖片失敗，{retry_delay} 秒後重試: {e}")
-                time.sleep(retry_delay)
-                retry_delay *= 2  # 指數退避
-
-        # 使用 Gemini 識別名片
-        print("🔍 開始 Gemini AI 識別...")
-        extracted_info = card_processor.extract_info_from_image(image_bytes)
-
-        if "error" in extracted_info:
-            error_message = f"❌ 名片識別失敗: {extracted_info['error']}"
-
+        
+        # 下載圖片
+        message_content = line_bot_api.get_message_content(event.message.id)
+        image_bytes = b''
+        for chunk in message_content.iter_content():
+            image_bytes += chunk
+        
+        # 使用多名片處理器進行品質檢查
+        print("🔍 開始多名片 AI 識別和品質評估...")
+        analysis_result = multi_card_processor.process_image_with_quality_check(image_bytes)
+        
+        if 'error' in analysis_result:
+            error_message = f"❌ 名片識別失敗: {analysis_result['error']}"
+            
             # 記錄失敗（如果在批次模式中）
             if is_batch_mode:
-                batch_manager.add_failed_card(user_id, extracted_info["error"])
+                batch_manager.add_failed_card(user_id, analysis_result['error'])
                 # 添加批次進度資訊
                 progress_msg = batch_manager.get_batch_progress_message(user_id)
                 error_message += f"\n\n{progress_msg}"
-
+            
             line_bot_api.push_message(
-                event.source.user_id, TextSendMessage(text=error_message)
+                event.source.user_id,
+                TextSendMessage(text=error_message)
             )
             return
-
-        # 存入 Notion (包含圖片)
-        print("💾 存入 Notion 資料庫...")
-        notion_result = notion_manager.create_name_card_record(
-            extracted_info, image_bytes
-        )
-
-        if notion_result["success"]:
-            # 記錄成功處理（如果在批次模式中）
-            if is_batch_mode:
-                card_info = {
-                    "name": extracted_info.get("name", "Unknown"),
-                    "company": extracted_info.get("company", "Unknown"),
-                    "notion_url": notion_result["url"],
-                }
-                batch_manager.add_processed_card(user_id, card_info)
-
-                # 批次模式簡化回應
-                session_info = batch_manager.get_session_info(user_id)
-                batch_message = f"""✅ 第 {session_info['total_count']} 張名片處理完成
-
-👤 {extracted_info.get('name', 'N/A')} ({extracted_info.get('company', 'N/A')})
-
-{batch_manager.get_batch_progress_message(user_id)}"""
-
-                line_bot_api.push_message(
-                    event.source.user_id, TextSendMessage(text=batch_message)
-                )
-            else:
-                # 單張模式詳細回應
-                success_message = f"""✅ 名片資訊已成功存入 Notion！
-
-👤 **姓名:** {extracted_info.get('name', 'N/A')}
-🏢 **公司:** {extracted_info.get('company', 'N/A')}
-🏬 **部門:** {extracted_info.get('department', 'N/A')}
-💼 **職稱:** {extracted_info.get('title', 'N/A')}
-📧 **Email:** {extracted_info.get('email', 'N/A')}
-📞 **電話:** {extracted_info.get('phone', 'N/A')}
-📍 **地址:** {extracted_info.get('address', 'N/A')}
-
-🔗 **Notion 頁面:** {notion_result['url']}
-
-💡 提示：發送「批次」可開啟批次處理模式"""
-
-                line_bot_api.push_message(
-                    event.source.user_id, TextSendMessage(text=success_message)
-                )
-        else:
-            error_message = f"❌ Notion 存入失敗: {notion_result['error']}"
-
-            # 記錄失敗（如果在批次模式中）
-            if is_batch_mode:
-                batch_manager.add_failed_card(user_id, notion_result["error"])
-                progress_msg = batch_manager.get_batch_progress_message(user_id)
-                error_message += f"\n\n{progress_msg}"
-
+        
+        # 根據分析結果決定處理方式
+        if analysis_result.get("action_required", False):
+            # 需要用戶選擇，創建交互會話
+            choice_message = user_interaction_handler.create_multi_card_session(user_id, analysis_result)
             line_bot_api.push_message(
-                event.source.user_id, TextSendMessage(text=error_message)
+                event.source.user_id,
+                TextSendMessage(text=choice_message)
             )
-
+            return
+        
+        # 自動處理（單張高品質名片）
+        elif analysis_result.get("auto_process", False):
+            cards_to_process = analysis_result.get("cards", [])
+            if cards_to_process:
+                line_bot_api.push_message(
+                    event.source.user_id,
+                    TextSendMessage(text="✅ 名片品質良好，正在自動處理...")
+                )
+                # 處理名片（使用原有邏輯，但適配新格式）
+                _process_single_card_from_multi_format(user_id, cards_to_process[0], is_batch_mode)
+            return
+        
+        # 如果到這裡，說明沒有匹配到其他情況，直接處理（向後兼容）
+        cards = analysis_result.get("cards", [])
+        if cards:
+            _process_single_card_from_multi_format(user_id, cards[0], is_batch_mode)
+            
     except Exception as e:
         print(f"❌ 處理圖片時發生錯誤: {e}")
-
-        # 根據錯誤類型提供更友善的訊息
-        error_str = str(e)
-        if "api-data.line.me" in error_str or "name resolution" in error_str.lower():
-            error_msg = """❌ 網路連接問題
-
-伺服器暫時無法連接到 LINE API，這通常是暫時性問題。
-
-🔄 **建議解決方式:**
-• 請稍候 1-2 分鐘後重試
-• 如果問題持續，請聯繫管理員
-
-⚠️ 這是網路基礎設施問題，不是您的名片問題。"""
-        else:
-            error_msg = f"❌ 處理過程中發生錯誤: {error_str}"
-
+        error_msg = f"❌ 處理過程中發生錯誤: {str(e)}"
+        
         # 記錄失敗（如果在批次模式中）
         if is_batch_mode:
             batch_manager.add_failed_card(user_id, str(e))
             progress_msg = batch_manager.get_batch_progress_message(user_id)
             error_msg += f"\n\n{progress_msg}"
+        
+        line_bot_api.push_message(
+            event.source.user_id,
+            TextSendMessage(text=error_msg)
+        )
 
-        line_bot_api.push_message(event.source.user_id, TextSendMessage(text=error_msg))
-
-
-@app.route("/health", methods=["GET"])
+@app.route("/health", methods=['GET'])
 def health_check():
     """健康檢查端點"""
     return {"status": "healthy", "message": "LINE Bot is running"}
 
-
-@app.route("/test", methods=["GET"])
+@app.route("/test", methods=['GET'])
 def test_services():
     """測試各服務連接狀態"""
     results = {}
-
+    
     # 測試 Notion 連接
     notion_test = notion_manager.test_connection()
-    results["notion"] = notion_test
-
+    results['notion'] = notion_test
+    
     # 測試 Gemini (簡單檢查)
     try:
         # 檢查是否能創建處理器實例
-        # Test processor initialization
-        NameCardProcessor()
-        results["gemini"] = {"success": True, "message": "Gemini 連接正常"}
+        test_processor = NameCardProcessor()
+        results['gemini'] = {"success": True, "message": "Gemini 連接正常"}
     except Exception as e:
-        results["gemini"] = {"success": False, "error": str(e)}
-
+        results['gemini'] = {"success": False, "error": str(e)}
+    
     return results
 
-
 # 添加一個調試用的通用路由
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
 def catch_all(path):
     """捕獲所有請求以便調試"""
     print(f"🔍 收到請求: method={request.method}, path=/{path}")
     print(f"📋 Headers: {dict(request.headers)}")
-
-    if path == "callback" and request.method == "POST":
+    
+    if path == 'callback' and request.method == 'POST':
         # 重定向到正確的 callback 處理
         return callback()
-
+    
     return {
-        "message": "Debug endpoint",
+        "message": "Debug endpoint", 
         "path": f"/{path}",
         "method": request.method,
-        "available_endpoints": ["/health", "/test", "/callback"],
+        "available_endpoints": ["/health", "/test", "/callback"]
     }
 
+def _process_single_card_from_multi_format(user_id: str, card_data: dict, is_batch_mode: bool):
+    """處理單張名片（從多名片格式適配到原有邏輯）"""
+    try:
+        # 存入 Notion
+        print("💾 存入 Notion 資料庫...")
+        notion_result = notion_manager.create_name_card_record(card_data, None)  # 暫時不傳圖片
+        
+        if notion_result['success']:
+            # 記錄成功處理（如果在批次模式中）
+            if is_batch_mode:
+                card_info = {
+                    'name': card_data.get('name', 'Unknown'),
+                    'company': card_data.get('company', 'Unknown'),
+                    'notion_url': notion_result['url']
+                }
+                batch_manager.add_processed_card(user_id, card_info)
+                
+                # 批次模式簡化回應
+                session_info = batch_manager.get_session_info(user_id)
+                batch_message = f"""✅ 第 {session_info['total_count']} 張名片處理完成
+                
+👤 {card_data.get('name', 'N/A')} ({card_data.get('company', 'N/A')})
+
+{batch_manager.get_batch_progress_message(user_id)}"""
+                
+                line_bot_api.push_message(
+                    user_id,
+                    TextSendMessage(text=batch_message)
+                )
+            else:
+                # 單張模式詳細回應
+                confidence_info = ""
+                if card_data.get('confidence_score'):
+                    confidence_info = f"\n🎯 **識別信心度:** {card_data['confidence_score']:.1%}"
+                
+                success_message = f"""✅ 名片資訊已成功存入 Notion！
+
+👤 **姓名:** {card_data.get('name', 'N/A')}
+🏢 **公司:** {card_data.get('company', 'N/A')}
+🏬 **部門:** {card_data.get('department', 'N/A')}
+💼 **職稱:** {card_data.get('title', 'N/A')}
+📧 **Email:** {card_data.get('email', 'N/A')}
+📞 **電話:** {card_data.get('phone', 'N/A')}{confidence_info}
+
+🔗 **Notion 頁面:** {notion_result['url']}
+
+💡 提示：發送「批次」可開啟批次處理模式"""
+                
+                line_bot_api.push_message(
+                    user_id,
+                    TextSendMessage(text=success_message)
+                )
+        else:
+            error_message = f"❌ Notion 存入失敗: {notion_result['error']}"
+            
+            # 記錄失敗（如果在批次模式中）
+            if is_batch_mode:
+                batch_manager.add_failed_card(user_id, notion_result['error'])
+                progress_msg = batch_manager.get_batch_progress_message(user_id)
+                error_message += f"\n\n{progress_msg}"
+            
+            line_bot_api.push_message(
+                user_id,
+                TextSendMessage(text=error_message)
+            )
+            
+    except Exception as e:
+        error_msg = f"❌ 處理名片時發生錯誤: {str(e)}"
+        print(error_msg)
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text=error_msg)
+        )
+
+def _process_multiple_cards_async(user_id: str, cards_to_process: list, is_batch_mode: bool):
+    """異步處理多張名片"""
+    try:
+        total_cards = len(cards_to_process)
+        success_count = 0
+        failed_count = 0
+        results = []
+        
+        for i, card_data in enumerate(cards_to_process, 1):
+            try:
+                # 處理單張名片
+                notion_result = notion_manager.create_name_card_record(card_data, None)
+                
+                if notion_result['success']:
+                    success_count += 1
+                    results.append({
+                        'success': True,
+                        'name': card_data.get('name', f'名片{i}'),
+                        'company': card_data.get('company', 'Unknown'),
+                        'url': notion_result['url']
+                    })
+                    
+                    # 記錄成功（如果在批次模式中）
+                    if is_batch_mode:
+                        card_info = {
+                            'name': card_data.get('name', f'名片{i}'),
+                            'company': card_data.get('company', 'Unknown'),
+                            'notion_url': notion_result['url']
+                        }
+                        batch_manager.add_processed_card(user_id, card_info)
+                else:
+                    failed_count += 1
+                    results.append({
+                        'success': False,
+                        'name': card_data.get('name', f'名片{i}'),
+                        'error': notion_result.get('error', '未知錯誤')
+                    })
+                    
+                    if is_batch_mode:
+                        batch_manager.add_failed_card(user_id, notion_result.get('error', '未知錯誤'))
+                        
+            except Exception as e:
+                failed_count += 1
+                error_msg = f"處理第{i}張名片時出錯: {str(e)}"
+                results.append({
+                    'success': False,
+                    'name': card_data.get('name', f'名片{i}'),
+                    'error': error_msg
+                })
+                
+                if is_batch_mode:
+                    batch_manager.add_failed_card(user_id, error_msg)
+        
+        # 發送處理結果摘要
+        summary_message = f"📊 **多名片處理完成**\n\n"
+        summary_message += f"✅ 成功處理：{success_count} 張\n"
+        summary_message += f"❌ 處理失敗：{failed_count} 張\n\n"
+        
+        if success_count > 0:
+            summary_message += "**成功處理的名片：**\n"
+            for result in results:
+                if result['success']:
+                    summary_message += f"• {result['name']} ({result.get('company', 'N/A')})\n"
+        
+        if failed_count > 0:
+            summary_message += f"\n**失敗記錄：**\n"
+            for result in results:
+                if not result['success']:
+                    summary_message += f"• {result['name']}: {result['error'][:30]}...\n"
+        
+        if is_batch_mode:
+            progress_msg = batch_manager.get_batch_progress_message(user_id)
+            summary_message += f"\n{progress_msg}"
+        
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text=summary_message)
+        )
+        
+    except Exception as e:
+        error_msg = f"❌ 批次處理多名片時發生錯誤: {str(e)}"
+        print(error_msg)
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text=error_msg)
+        )
 
 if __name__ == "__main__":
     print("🚀 啟動 LINE Bot 名片管理系統...")
     print("📋 使用 Notion 作為資料庫")
-    print("🤖 使用 Google Gemini AI 識別名片")
+    print("🤖 使用 Google Gemini AI 識別名片 + 多名片檢測")
+    print("🎯 支援品質評估和用戶交互選擇")
     print("⚡ 服務已就緒！")
-
-    # 使用環境變數中的端口（Zeabur 會自動設定），本地開發時預設為 5002
-    import os
-
-    port = int(os.environ.get("PORT", 5002))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    
+    # 在開發環境中運行
+    app.run(host='0.0.0.0', port=5002, debug=True)
