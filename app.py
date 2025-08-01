@@ -148,12 +148,17 @@ def handle_text_message(event):
     user_message = event.message.text.strip()
     user_id = event.source.user_id
 
-    # 批次模式指令處理  
+    # 批次模式指令處理
     if user_message.lower() in ["批次", "batch", "批次模式", "開始批次"]:
         result = batch_manager.start_batch_mode(user_id)
-        reply_result = safe_line_bot.safe_reply_message(event.reply_token, result["message"])
-        
-        if not reply_result["success"] and reply_result.get("error_type") == "quota_exceeded":
+        reply_result = safe_line_bot.safe_reply_message(
+            event.reply_token, result["message"]
+        )
+
+        if (
+            not reply_result["success"]
+            and reply_result.get("error_type") == "quota_exceeded"
+        ):
             # 記錄離線訊息
             log_message(f"📝 離線訊息記錄 - 用戶 {user_id}: {user_message}", "INFO")
         return
@@ -161,7 +166,7 @@ def handle_text_message(event):
     elif user_message.lower() in ["結束批次", "end batch", "完成批次", "批次結束"]:
         result = batch_manager.end_batch_mode(user_id)
         if result["success"]:
-            stats = result["statistics"] 
+            stats = result["statistics"]
             summary_text = f"""📊 **批次處理完成**
 
 ✅ **處理成功:** {stats['total_processed']} 張
@@ -323,12 +328,14 @@ def handle_image_message(event):
         if not content_result["success"]:
             error_msg = f"❗ 無法下載圖片: {content_result['message']}"
             if content_result.get("error_type") == "quota_exceeded":
-                fallback_msg = safe_line_bot.create_fallback_message("名片圖片識別", "quota_exceeded")
+                fallback_msg = safe_line_bot.create_fallback_message(
+                    "名片圖片識別", "quota_exceeded"
+                )
                 safe_line_bot.safe_push_message(event.source.user_id, fallback_msg)
             else:
                 safe_line_bot.safe_push_message(event.source.user_id, error_msg)
             return
-            
+
         message_content = content_result["content"]
         image_bytes = b""
         for chunk in message_content.iter_content():
@@ -423,7 +430,7 @@ def test_services():
 def api_status():
     """LINE Bot API 狀態監控端點"""
     status_report = safe_line_bot.get_status_report()
-    
+
     # 添加詳細的狀態信息
     detailed_status = {
         "timestamp": datetime.now().isoformat(),
@@ -431,33 +438,37 @@ def api_status():
             "operational": status_report["is_operational"],
             "quota_exceeded": status_report["quota_exceeded"],
             "quota_reset_time": status_report["quota_reset_time"],
-            "error_statistics": status_report["error_statistics"]
+            "error_statistics": status_report["error_statistics"],
         },
         "service_status": {
             "healthy": not status_report["quota_exceeded"],
             "degraded_service": status_report["quota_exceeded"],
-            "fallback_mode": status_report["quota_exceeded"]
+            "fallback_mode": status_report["quota_exceeded"],
         },
-        "recommendations": []
+        "recommendations": [],
     }
-    
+
     # 基於狀態提供建議
     if status_report["quota_exceeded"]:
-        detailed_status["recommendations"].extend([
-            "LINE Bot API 配額已達上限",
-            "考慮升級到付費方案", 
-            "或等待下個月配額重置",
-            "目前系統運行在降級模式"
-        ])
+        detailed_status["recommendations"].extend(
+            [
+                "LINE Bot API 配額已達上限",
+                "考慮升級到付費方案",
+                "或等待下個月配額重置",
+                "目前系統運行在降級模式",
+            ]
+        )
     elif sum(status_report["error_statistics"].values()) > 10:
-        detailed_status["recommendations"].extend([
-            "檢測到較多 API 錯誤",
-            "建議檢查網路連接狀況",
-            "或聯繫 LINE 客服確認服務狀態"
-        ])
+        detailed_status["recommendations"].extend(
+            [
+                "檢測到較多 API 錯誤",
+                "建議檢查網路連接狀況",
+                "或聯繫 LINE 客服確認服務狀態",
+            ]
+        )
     else:
         detailed_status["recommendations"].append("系統運行正常")
-    
+
     return detailed_status
 
 
