@@ -9,6 +9,8 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import ImageMessage, MessageEvent, TextMessage, TextSendMessage
 
 from batch_manager import BatchManager
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import Config
 from multi_card_processor import MultiCardProcessor
 from name_card_processor import NameCardProcessor
