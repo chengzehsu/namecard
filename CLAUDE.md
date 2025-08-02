@@ -770,181 +770,300 @@ ngrok http 5002
 
 ### 🌐 Zeabur 雲端部署 (推薦)
 
-Zeabur 是一個現代化的雲端部署平台，提供簡單易用的應用部署服務。我們整合了完整的 GitHub Actions 自動化部署流程。
+Zeabur 是一個現代化的雲端部署平台，支援 GitHub App 自動部署和手動配置。**強烈推薦使用 GitHub App 方式**，避免複雜的 CLI 配置問題。
 
-#### 🚀 自動部署流程 (GitHub Actions)
+## 🎯 部署方式選擇
 
-**文件位置**: `.github/workflows/deploy-zeabur.yml`
+### ⭐ 方案一：GitHub App 自動部署（強烈推薦）
 
-**觸發條件**:
-- **自動觸發**: 推送代碼到 `main` 分支時自動部署
-- **手動觸發**: GitHub Actions > "部署到 Zeabur" > Run workflow
-- **智能過濾**: 只有實際代碼變更才觸發部署（忽略文檔變更）
+**優點**：
+- ✅ 官方推薦方式，穩定可靠
+- ✅ Push 代碼自動部署，零配置 CI/CD
+- ✅ 避免 CLI 網路連線問題
+- ✅ 簡單易懂，維護成本低
 
-**部署流程**:
-```
-1. 預部署檢查 (可選跳過)
-   ├── 語法檢查 (Python 編譯)
-   ├── 核心模組驗證
-   └── 必要文件檢查
+**缺點**：
+- ⚠️ 需要手動在 Zeabur 設置環境變數（但這很簡單）
 
-2. Zeabur 部署
-   ├── 安裝 Zeabur CLI
-   ├── 配置認證
-   ├── 創建部署配置
-   ├── 專案/服務管理
-   └── 環境變數設置
+### 🔧 方案二：API Token + GitHub Actions（進階）
 
-3. 健康檢查
-   ├── 等待服務啟動
-   ├── 端點連通性測試
-   └── 部署狀態驗證
+**優點**：
+- ✅ 更細緻的部署控制
+- ✅ 可自定義複雜部署流程
 
-4. 部署後測試
-   ├── 健康檢查端點測試
-   ├── Webhook 端點測試
-   └── 結果通知
-```
+**缺點**：
+- ❌ 配置複雜，容易出錯
+- ❌ CLI 可能遇到網路超時問題
+- ❌ 維護成本高
 
-#### 🔧 Zeabur 配置設置
+---
 
-##### 1. 獲取 Zeabur Token
-```bash
-# 步驟
-1. 前往 https://dash.zeabur.com/account/developer
-2. 生成新的 API Token
-3. 複製 Token 值
-4. 在 GitHub Repository Settings > Secrets and variables > Actions
-5. 新增 Secret: ZEABUR_TOKEN = your_token_here
-```
+## 🚀 GitHub App 部署設置（推薦流程）
 
-##### 2. GitHub Secrets 配置
-```bash
-# 必要 Secrets (用於 Zeabur 部署)
-ZEABUR_TOKEN                   # Zeabur 部署權杖 (必須)
-LINE_CHANNEL_ACCESS_TOKEN      # LINE Bot API 權杖
-LINE_CHANNEL_SECRET            # LINE Bot 驗證密鑰  
-GOOGLE_API_KEY                 # Google Gemini AI API 金鑰 (主要)
-GOOGLE_API_KEY_FALLBACK        # Google Gemini AI API 金鑰 (備用)
-NOTION_API_KEY                 # Notion 整合 API 金鑰
-NOTION_DATABASE_ID             # Notion 資料庫 ID
-```
+### 📋 步驟 1: 綁定 GitHub 帳號和安裝 App
 
-##### 3. 部署配置詳情
+**1.1 綁定 GitHub 帳號到 Zeabur**
+👉 [點擊綁定](https://github.com/login/oauth/authorize?client_id=Iv1.eb8b8a6402b888d3&redirect_uri=https://zeabur.com/auth/github/callback&state=e30=)
+
+**1.2 安裝 Zeabur GitHub App**
+👉 [點擊安裝](https://github.com/apps/zeabur/installations/new)
+
+**重要設置**：
+- ✅ 選擇 "Only select repositories"
+- ✅ 選擇您的 repository (例如：`chengzehsu/namecard`)
+- ✅ 點擊 "Install" 完成安裝
+
+### 📋 步驟 2: 在 Zeabur 創建專案和服務
+
+**2.1 前往 Zeabur Dashboard**
+👉 https://dash.zeabur.com/
+
+**2.2 創建專案**
+1. 點擊 **"Create Project"**
+2. 專案名稱：`namecard-telegram-bot`（或您偏好的名稱）
+3. 區域：`Hong Kong (hkg)`（推薦，延遲最低）
+4. 點擊 **"Create"**
+
+**2.3 添加服務**
+1. 在專案中點擊 **"Add Service"**
+2. 選擇 **"Git Repository"**
+3. 選擇您的 repository
+4. 分支：`main`
+5. 服務名稱：保持預設或自定義
+6. 點擊 **"Deploy"**
+
+### 📋 步驟 3: 配置 zeabur.json（重要）
+
+確保專案根目錄有正確的 `zeabur.json` 配置：
+
+#### LINE Bot 配置
 ```json
 {
-  "name": "namecard-line-bot",
-  "type": "python",
-  "buildCommand": "pip install -r requirements.txt",
-  "startCommand": "python app.py",
+  "name": "line-bot",
+  "build": {
+    "command": "pip install -r requirements.txt"
+  },
+  "start": {
+    "command": "python app.py"
+  },
+  "port": 5002,
   "environment": {
+    "PORT": "5002",
     "PYTHON_VERSION": "3.9",
-    "PORT": "5002"
+    "FLASK_ENV": "production",
+    "PYTHONUNBUFFERED": "1",
+    "SERVICE_TYPE": "line-bot"
   },
   "regions": ["hkg"],
-  "scaling": {
-    "minInstances": 1,
-    "maxInstances": 2
+  "healthcheck": {
+    "path": "/health",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3
   }
 }
 ```
 
-#### 📱 手動部署操作
+#### Telegram Bot 配置
+```json
+{
+  "name": "telegram-bot",
+  "build": {
+    "command": "pip install -r requirements-telegram.txt"
+  },
+  "start": {
+    "command": "python main.py"
+  },
+  "port": 5003,
+  "environment": {
+    "PORT": "5003",
+    "PYTHON_VERSION": "3.9",
+    "FLASK_ENV": "production",
+    "PYTHONUNBUFFERED": "1",
+    "SERVICE_TYPE": "telegram-bot"
+  },
+  "regions": ["hkg"],
+  "healthcheck": {
+    "path": "/health",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3
+  }
+}
+```
 
-##### 方法 1: 自動部署 (推薦)
+### 📋 步驟 4: 設置環境變數（關鍵步驟）
+
+**⚠️ 重要**: GitHub Actions 的 Secrets 和 Zeabur 的環境變數是**完全獨立**的系統！
+- GitHub Secrets → 只在 CI/CD 過程中使用  
+- Zeabur 環境變數 → 在應用實際運行時使用
+
+**4.1 進入服務設置**
+1. 在 Zeabur Dashboard 中找到您的專案
+2. 點擊服務名稱進入詳情頁面
+3. 找到 **"Variables"** 或 **"Environment Variables"** 標籤
+
+**4.2 添加必要環境變數**
+
+#### LINE Bot 環境變數
 ```bash
-# 簡單推送即可觸發部署
+# Bot 配置
+LINE_CHANNEL_ACCESS_TOKEN = your_line_channel_access_token
+LINE_CHANNEL_SECRET = your_line_channel_secret
+SERVICE_TYPE = line-bot
+
+# AI 配置
+GOOGLE_API_KEY = your_google_api_key
+GOOGLE_API_KEY_FALLBACK = your_fallback_api_key
+GEMINI_MODEL = gemini-2.5-pro
+
+# 資料庫配置
+NOTION_API_KEY = your_notion_api_key
+NOTION_DATABASE_ID = your_notion_database_id
+
+# 運行配置
+PORT = 5002
+FLASK_ENV = production
+PYTHONUNBUFFERED = 1
+PYTHON_VERSION = 3.9
+```
+
+#### Telegram Bot 環境變數
+```bash
+# Bot 配置
+TELEGRAM_BOT_TOKEN = your_telegram_bot_token
+SERVICE_TYPE = telegram-bot
+
+# AI 配置
+GOOGLE_API_KEY = your_google_api_key
+GOOGLE_API_KEY_FALLBACK = your_fallback_api_key
+GEMINI_MODEL = gemini-2.5-pro
+
+# 資料庫配置
+NOTION_API_KEY = your_notion_api_key
+NOTION_DATABASE_ID = your_notion_database_id
+
+# 運行配置
+PORT = 5003
+FLASK_ENV = production
+PYTHONUNBUFFERED = 1
+PYTHON_VERSION = 3.9
+```
+
+**4.3 保存並重新部署**
+1. 設置完所有環境變數後，點擊 **"Save"**
+2. 點擊 **"Redeploy"** 或 **"Deploy"** 重新部署
+3. 等待 2-3 分鐘讓部署完成
+
+### 📋 步驟 5: 自動部署流程
+
+**5.1 GitHub App 自動部署**
+```bash
+# 簡單推送代碼即可觸發自動部署
 git add .
 git commit -m "feat: 新功能更新"
 git push origin main
-# → 自動觸發部署流程
+# → Zeabur 自動檢測變更並重新部署
 ```
 
-##### 方法 2: 手動觸發部署
-```bash
-# 在 GitHub 介面操作
-1. 前往 GitHub Repository > Actions
-2. 選擇 "部署到 Zeabur" workflow
-3. 點擊 "Run workflow"
-4. 選擇部署參數:
-   - environment: production/staging
-   - force_deploy: 是否跳過預檢查
-5. 點擊 "Run workflow" 執行
+**5.2 GitHub Actions 監控（可選）**
+使用簡化的 GitHub Actions 工作流來監控部署：
+
+```yaml
+# .github/workflows/deploy-telegram-zeabur.yml
+name: Telegram Bot - Zeabur 自動部署
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: 🚀 自動部署 Telegram Bot
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 📝 部署信息
+      run: |
+        echo "🚀 Telegram Bot 自動部署到 Zeabur"
+        echo "📅 部署時間: $(date)"
+        echo "✅ GitHub App 已設置，Zeabur 會自動檢測並部署"
+        echo "🔍 請前往 Zeabur Dashboard 查看部署狀態"
 ```
 
-##### 方法 3: 使用 GitHub CLI
+## 🔍 部署狀態監控和驗證
+
+### 📊 1. Zeabur Dashboard 監控（主要）
+
+**監控位置**: https://dash.zeabur.com/
+
+**關鍵信息**:
+- ✅ **部署狀態**: 顯示當前部署是否成功
+- ✅ **應用日誌**: 查看啟動日誌和錯誤信息  
+- ✅ **資源使用**: CPU、記憶體使用情況
+- ✅ **部署 URL**: 獲取應用的實際 URL
+
+**常見 URL 格式**:
+- `https://namecard-app.zeabur.app`
+- `https://your-service-name.zeabur.app`
+
+### 📊 2. 健康檢查驗證
+
+**檢查端點**:
 ```bash
-# 安裝 GitHub CLI
-brew install gh  # macOS
-# 或訪問 https://cli.github.com/
+# 健康檢查
+curl https://your-app.zeabur.app/health
+# 預期回應: {"status": "healthy", "timestamp": "..."}
 
-# 登入 GitHub
-gh auth login
+# 服務測試  
+curl https://your-app.zeabur.app/test
+# 預期回應: 服務基本信息
 
-# 觸發部署
-gh workflow run "部署到 Zeabur" \
-  -f environment=production \
-  -f force_deploy=false
+# LINE Bot Webhook (LINE Bot)
+curl -X POST https://your-app.zeabur.app/callback
+# 預期回應: 400 (正常，因為缺少 LINE 簽名)
 
-# 查看部署狀態
-gh run list --workflow="部署到 Zeabur"
-gh run view [run-id] --log
+# Telegram Bot Webhook (Telegram Bot)  
+curl -X POST https://your-app.zeabur.app/telegram-webhook
+# 預期回應: 400 (正常，因為缺少 Telegram 數據)
 ```
 
-#### 🔍 部署狀態監控
+### 📊 3. GitHub Actions 監控（輔助）
 
-##### 1. GitHub Actions 監控
+使用簡化的 GitHub Actions 來監控代碼推送：
+
 ```bash
-# 實時查看部署進度
-https://github.com/your-repo/actions
+# 查看 GitHub Actions 狀態
+https://github.com/your-username/your-repo/actions
 
-# 部署日誌查看
-- 點擊最新的 "部署到 Zeabur" workflow run
-- 查看各個步驟的詳細日誌
-- 監控部署進度和錯誤信息
+# 查看特定工作流
+- 點擊 "Telegram Bot - Zeabur 自動部署" 工作流
+- 查看執行歷史和狀態
+- 主要用於確認代碼推送成功
 ```
 
-##### 2. Zeabur Dashboard 監控
+## 🔧 部署後配置
+
+### 📱 1. 設置 Bot Webhook URL
+
+#### LINE Bot Webhook 設置
 ```bash
-# Zeabur 控制台
-https://dash.zeabur.com/
-
-# 專案信息
-- 專案名稱: namecard-line-bot
-- 服務名稱: namecard-app
-- 部署區域: 香港 (hkg)
-- 實例配置: 1-2 個實例自動擴展
-```
-
-##### 3. 應用健康監控
-```bash
-# 自動健康檢查端點
-https://your-app.zeabur.app/health
-
-# 測試端點
-https://your-app.zeabur.app/test
-
-# LINE Webhook 端點
-https://your-app.zeabur.app/callback
-```
-
-#### 🔧 部署後配置
-
-##### 1. 更新 LINE Webhook URL
-```bash
-# 步驟詳情
-1. 獲取部署 URL (從 GitHub Actions 日誌中)
-   格式: https://namecard-line-bot-xxx.zeabur.app
+# 步驟
+1. 從 Zeabur Dashboard 獲取部署 URL
+   例如: https://namecard-app.zeabur.app
 
 2. 前往 LINE Developers Console
-   https://developers.line.biz/console/
+   👉 https://developers.line.biz/console/
 
 3. 選擇您的 LINE Bot Channel
 
 4. 前往 "Messaging API" 標籤頁
 
 5. 更新 Webhook URL:
-   新 URL: https://your-app.zeabur.app/callback
+   設置為: https://your-app.zeabur.app/callback
 
 6. 啟用 "Use webhook" 選項
 
@@ -953,76 +1072,157 @@ https://your-app.zeabur.app/callback
 8. 確認狀態顯示為 "Success"
 ```
 
-##### 2. 驗證部署成功
+#### Telegram Bot Webhook 設置
 ```bash
-# 健康檢查
-curl https://your-app.zeabur.app/health
-# 應該返回: {"status": "healthy", "timestamp": "..."}
+# 使用 Telegram Bot API 設置 Webhook
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+  -d "url=https://your-app.zeabur.app/telegram-webhook"
 
-# 服務測試
-curl https://your-app.zeabur.app/test
-# 應該返回: {"message": "名片管理 LINE Bot 運行中", ...}
+# 驗證 Webhook 設置
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo"
 
-# Webhook 端點測試
-curl -X POST https://your-app.zeabur.app/callback
-# 應該返回 400 (正常，因為沒有提供正確的 LINE 簽名)
+# 預期回應應包含您的 webhook URL
 ```
 
-##### 3. LINE Bot 功能測試
+### 🧪 2. 功能測試
+
+#### LINE Bot 測試
 ```bash
 # 測試流程
 1. 在 LINE 中搜尋並添加您的 Bot
 2. 發送 "help" 測試基本響應
-3. 發送名片圖片測試 AI 識別功能
-4. 檢查 Notion 資料庫是否正確存儲
-5. 測試批次處理模式
+3. 發送 "批次" 測試批次模式
+4. 發送名片圖片測試 AI 識別功能
+5. 檢查 Notion 資料庫是否正確存儲
 ```
 
-#### ⚠️ 常見問題排查
-
-##### 1. 部署失敗
+#### Telegram Bot 測試  
 ```bash
-# 檢查事項
-✅ ZEABUR_TOKEN 是否正確設置
-✅ GitHub Secrets 中的 API Keys 是否齊全
-✅ requirements.txt 是否包含所有依賴
-✅ app.py 語法是否正確
-✅ 網路連接是否正常
-
-# 解決方法
-1. 檢查 GitHub Actions 錯誤日誌
-2. 確認 Zeabur Token 有效性
-3. 手動觸發部署並啟用 force_deploy
-4. 聯繫 Zeabur 技術支援
+# 測試流程
+1. 在 Telegram 中找到您的 Bot
+2. 發送 /start 測試基本響應
+3. 發送 /help 查看功能說明
+4. 發送 /batch 測試批次模式
+5. 發送名片圖片測試 AI 識別功能
+6. 檢查 Notion 資料庫是否正確存儲
 ```
 
-##### 2. 健康檢查失敗
-```bash
-# 可能原因
-- 應用啟動時間過長
-- 環境變數配置錯誤
-- 依賴安裝失敗
-- 端口配置問題
+## ⚠️ 常見問題排查
 
-# 解決方法
-1. 查看 Zeabur Dashboard 的應用日誌
-2. 檢查環境變數是否正確設置
-3. 確認 Flask 應用監聽正確端口 (5002)
-4. 等待更長時間讓應用完全啟動
+### 🚨 1. 應用啟動失敗 (502 Bad Gateway)
+
+**症狀**: 訪問 `https://your-app.zeabur.app/health` 返回 502 錯誤
+
+**最常見原因**: **缺少環境變數**
+
+**解決步驟**:
+```bash
+1. 前往 Zeabur Dashboard → 您的專案 → 服務詳情
+2. 查看 "Logs" 標籤中的錯誤信息
+3. 如果看到 "缺少必要的環境變數" 錯誤:
+   - 前往 "Variables" 或 "Environment Variables" 標籤
+   - 添加所有必要的環境變數（見上方列表）
+   - 點擊 "Redeploy" 重新部署
+4. 等待 2-3 分鐘讓部署完成
 ```
 
-##### 3. LINE Webhook 連接失敗
-```bash
-# 檢查事項
-✅ Webhook URL 格式正確
-✅ SSL 證書有效 (Zeabur 自動提供)
-✅ 應用正常運行
-✅ LINE_CHANNEL_SECRET 設置正確
+**檢查清單**:
+- ✅ 所有必要環境變數都已設置
+- ✅ API Keys 格式正確（無多餘空格）
+- ✅ Port 設置正確 (LINE Bot: 5002, Telegram Bot: 5003)
+- ✅ zeabur.json 配置正確
 
-# 測試方法
-curl -X POST https://your-app.zeabur.app/callback \
-  -H "Content-Type: application/json" \
-  -d '{"events":[]}'
+### 🚨 2. GitHub App 部署未觸發
+
+**症狀**: Push 代碼後 Zeabur 沒有自動部署
+
+**解決步驟**:
+```bash
+1. 檢查 GitHub App 是否正確安裝:
+   - 前往 GitHub Repository → Settings → Integrations
+   - 確認 "Zeabur" App 已安裝且有權限
+
+2. 檢查 Zeabur 服務配置:
+   - 前往 Zeabur Dashboard → 專案 → 服務設置
+   - 確認服務已連接到正確的 Git repository 和分支
+
+3. 手動觸發部署:
+   - 在 Zeabur 服務頁面點擊 "Deploy" 按鈕
+```
+
+### 🚨 3. Bot 無法回應
+
+**症狀**: Bot 已部署但不回應使用者訊息
+
+**LINE Bot 排查**:
+```bash
+1. 檢查 Webhook URL 設置:
+   - LINE Developers Console → Messaging API
+   - 確認 Webhook URL 正確且已啟用
+
+2. 測試 Webhook 連接:
+   curl -X POST https://your-app.zeabur.app/callback \
+     -H "Content-Type: application/json" \
+     -d '{"events":[]}'
+   # 應該返回 400 (正常)
+
+3. 檢查環境變數:
+   - LINE_CHANNEL_ACCESS_TOKEN
+   - LINE_CHANNEL_SECRET
+```
+
+**Telegram Bot 排查**:
+```bash
+1. 檢查 Webhook 設置:
+   curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo"
+   # 確認 URL 正確
+
+2. 重新設置 Webhook:
+   curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+     -d "url=https://your-app.zeabur.app/telegram-webhook"
+
+3. 檢查環境變數:
+   - TELEGRAM_BOT_TOKEN
+```
+
+### 🚨 4. 環境變數設置問題
+
+**重要提醒**: GitHub Actions Secrets ≠ Zeabur 環境變數
+
+**正確理解**:
+- **GitHub Secrets** → 只在 GitHub Actions 執行時使用
+- **Zeabur 環境變數** → 應用實際運行時使用  
+
+**必須在兩個地方都設置**:
+1. GitHub Repository → Settings → Secrets (用於 CI/CD)
+2. Zeabur Dashboard → Service → Variables (用於應用運行)
+
+### 🚨 5. 依賴安裝問題
+
+**症狀**: 部署日誌顯示包安裝失敗
+
+**解決方法**:
+```bash
+1. 檢查 requirements.txt 或 requirements-telegram.txt
+2. 確認所有包名稱和版本正確
+3. 在 zeabur.json 中使用正確的依賴文件:
+   - LINE Bot: "pip install -r requirements.txt"
+   - Telegram Bot: "pip install -r requirements-telegram.txt"
+```
+
+### 📞 獲得幫助
+
+**Zeabur 支援**:
+- 文檔: https://zeabur.com/docs
+- 社群: Discord 支援群組
+
+**Debug 信息收集**:
+```bash
+# 提供以下信息有助於診斷問題
+1. Zeabur 服務 URL
+2. 錯誤日誌截圖 (從 Zeabur Dashboard)
+3. 環境變數設置情況 (隱藏敏感值)
+4. zeabur.json 配置內容
 ```
 
 #### 📊 部署效能指標
