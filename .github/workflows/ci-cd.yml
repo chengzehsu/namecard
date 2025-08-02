@@ -256,8 +256,9 @@ jobs:
           cat Procfile
         fi
         
-        if [ -f "railway_app.py" ]; then
-          echo "✅ railway_app.py 存在 (Railway 部署)"
+        # 檢查部署配置文件
+        if [ -f "zeabur.json" ]; then
+          echo "✅ zeabur.json 存在 (Zeabur 部署)"
         fi
         
         if [ -f "deploy.sh" ]; then

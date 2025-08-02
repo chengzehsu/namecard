@@ -1,0 +1,101 @@
+name: 🚀 簡化 Zeabur 部署
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'telegram_app.py'
+      - 'requirements-telegram.txt'
+      - 'zeabur.json'
+      - '.github/workflows/deploy-zeabur-simple.yml'
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: '強制部署'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  deploy:
+    name: 🚀 部署到 Zeabur
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      
+    - name: 🐍 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 安裝依賴
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements-telegram.txt
+        
+    - name: 🔍 基本測試
+      run: |
+        echo "執行基本語法檢查..."
+        python -m py_compile telegram_app.py
+        python -m py_compile config.py
+        echo "✅ 語法檢查通過"
+        
+    - name: 📝 創建部署配置
+      run: |
+        echo "創建 Zeabur 部署配置..."
+        
+        # 創建 zeabur.json (如果不存在或需要更新)
+        cat > zeabur.json << 'EOF'
+        {
+          "name": "namecard-telegram-bot",
+          "build": {
+            "command": "pip install -r requirements-telegram.txt"
+          },
+          "start": {
+            "command": "python telegram_app.py"
+          },
+          "environment": {
+            "PORT": "5003",
+            "PYTHON_VERSION": "3.9"
+          }
+        }
+        EOF
+        
+        echo "✅ 部署配置已創建"
+        
+    - name: 🌐 部署提示
+      run: |
+        echo "📋 Zeabur 部署準備完成！"
+        echo ""
+        echo "🔧 手動部署步驟："
+        echo "1. 前往 https://dash.zeabur.com"
+        echo "2. 登入並創建新專案"
+        echo "3. 連接此 GitHub 倉庫"
+        echo "4. 選擇 'namecard' 倉庫"
+        echo "5. Zeabur 會自動檢測到 zeabur.json 配置"
+        echo "6. 設置環境變數 (見下方清單)"
+        echo "7. 點擊部署"
+        echo ""
+        echo "🔑 需要設置的環境變數："
+        echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        echo "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}"
+        echo "GOOGLE_API_KEY_FALLBACK=${{ secrets.GOOGLE_API_KEY_FALLBACK }}"
+        echo "NOTION_API_KEY=${{ secrets.NOTION_API_KEY }}"
+        echo "NOTION_DATABASE_ID=${{ secrets.NOTION_DATABASE_ID }}"
+        echo ""
+        echo "✅ 所有文件已準備完成，可以進行部署"
+
+    - name: 📤 提交配置更新
+      run: |
+        # 如果 zeabur.json 有變更，提交它
+        if ! git diff --quiet zeabur.json 2>/dev/null; then
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add zeabur.json
+          git commit -m "update: 更新 Zeabur 部署配置" || echo "沒有變更需要提交"
+          git push || echo "推送失敗或沒有變更"
+        else
+          echo "zeabur.json 沒有變更"
+        fi

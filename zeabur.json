@@ -1,61 +1,15 @@
 {
   "name": "namecard-telegram-bot",
-  "type": "python",
-  "framework": "flask",
-  "buildCommand": "pip install -r requirements-telegram.txt",
-  "startCommand": "python telegram_app.py",
+  "build": {
+    "command": "pip install -r requirements-telegram.txt"
+  },
+  "start": {
+    "command": "python telegram_app.py"
+  },
   "environment": {
-    "PYTHON_VERSION": "3.9",
     "PORT": "5003",
-    "FLASK_ENV": "production",
-    "FLASK_DEBUG": "false",
-    "PYTHONUNBUFFERED": "1"
-  },
-  "regions": ["hkg", "sin"],
-  "scaling": {
-    "minInstances": 1,
-    "maxInstances": 3,
-    "targetCPU": 80
-  },
-  "healthCheck": {
-    "path": "/health",
-    "port": 5003,
-    "timeout": 30,
-    "interval": 60
-  },
-  "volumes": [],
-  "services": {
-    "namecard-telegram-app": {
-      "type": "web",
-      "port": 5003,
-      "domain": {
-        "generate": true
-      }
-    }
-  },
-  "addons": [],
-  "prebuiltImage": false,
-  "dockerFile": null,
-  "buildArgs": {},
-  "secrets": [
-    "TELEGRAM_BOT_TOKEN",
-    "GOOGLE_API_KEY",
-    "GOOGLE_API_KEY_FALLBACK",
-    "NOTION_API_KEY",
-    "NOTION_DATABASE_ID"
-  ],
-  "envVars": {
-    "PORT": "5003",
-    "FLASK_ENV": "production",
-    "FLASK_DEBUG": "false",
     "PYTHON_VERSION": "3.9",
+    "FLASK_ENV": "production",
     "PYTHONUNBUFFERED": "1"
-  },
-  "description": "名片管理 Telegram Bot - 使用 Google Gemini AI 識別名片並存入 Notion",
-  "tags": ["telegrambot", "ai", "notion", "gemini", "namecard"],
-  "repository": {
-    "type": "github",
-    "autoDeploy": true,
-    "branch": "main"
   }
 }

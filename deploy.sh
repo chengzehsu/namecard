@@ -28,13 +28,13 @@ echo "📤 推送代碼到 GitHub..."
 git add .
 git commit -m "🚀 準備部署到雲端平台
 
-- 更新 railway_app.py 包含最新功能
+- 更新應用包含最新功能
 - 新增地址欄位支援
 - 完整的雲端部署配置
 - 包含所有必要依賴
 
 準備在以下平台部署：
-- Railway (推薦)
+- Zeabur (推薦)
 - Render
 - Google Cloud Run"
 
@@ -46,7 +46,7 @@ echo "
 🎉 部署準備完成！
 
 下一步：
-1. 前往 Railway.app 註冊帳號
+1. 前往 Zeabur.com 註冊帳號
 2. 連接你的 GitHub 倉庫
 3. 設定環境變數
 4. 一鍵部署！

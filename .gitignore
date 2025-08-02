@@ -201,8 +201,8 @@ $RECYCLE.BIN/
 # ngrok 配置
 ngrok.yml
 
-# Railway
-.railway/
+# Zeabur
+.zeabur/
 
 # Heroku
 .heroku/

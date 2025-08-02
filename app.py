@@ -663,7 +663,7 @@ if __name__ == "__main__":
     log_message("🤖 使用 Google Gemini AI 識別名片 + 多名片檢測")
     log_message("🎯 支援品質評估和用戶交互選擇")
 
-    # 獲取端口配置（支援 Zeabur/Railway 等雲端平台）
+    # 獲取端口配置（支援 Zeabur/Heroku 等雲端平台）
     port = int(os.environ.get("PORT", 5002))
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
 
