@@ -1,0 +1,7 @@
+# Zeabur deployment trigger file
+# This file changes to force a rebuild of the service
+# Last updated: 2025-08-02 14:16:00 CST
+# Service: Telegram Bot (main.py)
+# Build: 20250802-1416
+TELEGRAM_BOT_DEPLOYMENT=true
+FORCE_REBUILD=true

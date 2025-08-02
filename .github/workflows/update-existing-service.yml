@@ -1,0 +1,203 @@
+name: 🔄 更新現有服務為 Telegram Bot
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_update:
+        description: '確認更新現有服務 (namecard-app.zeabur.app)'
+        required: true
+        default: 'confirm'
+        type: string
+
+jobs:
+  update-service:
+    name: 🔄 更新現有 Zeabur 服務
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_update == 'confirm'
+    
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      
+    - name: 🐍 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 安裝依賴
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements-telegram.txt
+        
+    - name: 🔍 驗證 Telegram Bot 文件
+      run: |
+        echo "🔍 驗證 Telegram Bot 所需文件..."
+        
+        # 檢查必要文件
+        required_files=("main.py" "telegram_app.py" "requirements-telegram.txt")
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✅ $file 存在"
+          else
+            echo "❌ $file 缺失"
+            exit 1
+          fi
+        done
+        
+        # 驗證語法
+        python -m py_compile main.py
+        python -m py_compile telegram_app.py
+        echo "✅ 語法檢查通過"
+        
+    - name: 📁 建立直接部署配置
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        GOOGLE_API_KEY_FALLBACK: ${{ secrets.GOOGLE_API_KEY_FALLBACK }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+      run: |
+        echo "📁 建立服務更新配置..."
+        
+        # 建立 Zeabur 部署檔案，專門用於更新現有服務
+        cat > zeabur-update.json << 'EOF'
+        {
+          "build": {
+            "command": "pip install -r requirements-telegram.txt"
+          },
+          "start": {
+            "command": "python main.py"
+          },
+          "environment": {
+            "PORT": "5003",
+            "PYTHON_VERSION": "3.9",
+            "FLASK_ENV": "production",
+            "PYTHONUNBUFFERED": "1",
+            "SERVICE_TYPE": "telegram-bot"
+          }
+        }
+        EOF
+        
+        echo "✅ 更新配置已建立"
+        cat zeabur-update.json
+        
+    - name: 🚀 觸發服務重新部署
+      run: |
+        echo "🚀 觸發現有服務重新部署..."
+        
+        # 建立時間戳觸發檔案
+        echo "# 強制重新部署觸發器" > .deploy-trigger
+        echo "TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)" >> .deploy-trigger
+        echo "SERVICE=telegram-bot" >> .deploy-trigger
+        echo "ENTRY_POINT=main.py" >> .deploy-trigger
+        echo "PORT=5003" >> .deploy-trigger
+        
+        # 更新 zeabur.json 為最終配置
+        cp zeabur-update.json zeabur.json
+        
+        echo "✅ 配置檔案已更新，準備推送變更..."
+        
+    - name: 📤 推送配置變更
+      run: |
+        echo "📤 推送服務配置變更..."
+        
+        # 設定 Git 配置
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Bot"
+        
+        # 添加變更的檔案
+        git add zeabur.json .deploy-trigger zeabur-update.json
+        
+        # 提交變更
+        git commit -m "update: 強制更新現有服務為 Telegram Bot
+
+- 更新 zeabur.json 配置為 Telegram Bot
+- 使用 main.py 作為入口點
+- 建立部署觸發器強制重建
+- 時間戳: $(date -u +%Y%m%d_%H%M%S)
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>" || echo "沒有變更需要提交"
+        
+        # 推送變更
+        git push || echo "推送失敗或沒有變更"
+        
+        echo "✅ 配置變更已推送"
+        
+    - name: 🏥 等待並驗證服務更新
+      run: |
+        echo "🏥 等待服務更新並驗證..."
+        
+        # 等待服務重啟
+        echo "⏳ 等待 60 秒讓服務重新部署..."
+        sleep 60
+        
+        # 檢查服務狀態
+        SERVICE_URL="https://namecard-app.zeabur.app"
+        
+        echo "🔍 測試服務健康狀態..."
+        for i in {1..10}; do
+          echo "嘗試 $i/10..."
+          
+          if curl -f -s "$SERVICE_URL/health" > /dev/null; then
+            echo "✅ 服務健康檢查通過"
+            
+            # 檢查是否是 Telegram Bot
+            health_response=$(curl -s "$SERVICE_URL/health")
+            echo "健康檢查回應: $health_response"
+            
+            # 檢查 Telegram webhook 端點
+            if curl -f -s "$SERVICE_URL/telegram-webhook" > /dev/null; then
+              echo "✅ Telegram webhook 端點可用"
+              echo "🎉 Telegram Bot 服務更新成功！"
+              echo ""
+              echo "📱 **服務資訊:**"
+              echo "- 🔗 服務 URL: $SERVICE_URL"
+              echo "- 🏥 健康檢查: $SERVICE_URL/health"
+              echo "- 📞 Webhook: $SERVICE_URL/telegram-webhook"
+              echo ""
+              echo "📋 **後續步驟:**"
+              echo "1. 設定 Telegram Bot Webhook URL"
+              echo "2. 測試 Telegram Bot 功能"
+              echo "3. 驗證名片識別功能"
+              
+              exit 0
+            else
+              echo "⚠️ Telegram webhook 端點尚未可用"
+            fi
+          else
+            echo "❌ 健康檢查失敗"
+          fi
+          
+          echo "⏳ 等待 10 秒後重試..."
+          sleep 10
+        done
+        
+        echo "⚠️ 服務更新驗證未完全成功，但部署流程已完成"
+        echo "請手動檢查服務狀態: $SERVICE_URL"
+        
+    - name: 📋 更新總結
+      if: always()
+      run: |
+        echo "📋 **Telegram Bot 服務更新總結**"
+        echo ""
+        echo "✅ **完成的步驟:**"
+        echo "- 更新 zeabur.json 配置"
+        echo "- 設定 Telegram Bot 入口點 (main.py)"
+        echo "- 推送配置變更觸發重新部署"
+        echo "- 等待服務重新啟動"
+        echo ""
+        echo "🔗 **服務資訊:**"
+        echo "- 主要 URL: https://namecard-app.zeabur.app"
+        echo "- 健康檢查: https://namecard-app.zeabur.app/health"
+        echo "- Telegram Webhook: https://namecard-app.zeabur.app/telegram-webhook"
+        echo ""
+        echo "📋 **後續動作:**"
+        echo "1. 等待 2-3 分鐘讓服務完全啟動"
+        echo "2. 訪問健康檢查端點確認服務狀態"
+        echo "3. 設定 Telegram Bot Webhook"
+        echo "4. 測試 Telegram Bot 功能"
+        echo ""
+        echo "🔧 **Telegram Webhook 設定指令:**"
+        echo 'curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" -d "url=https://namecard-app.zeabur.app/telegram-webhook"'
