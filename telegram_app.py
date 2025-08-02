@@ -10,11 +10,11 @@ from flask import Flask, request
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import (
-    Application, 
-    CommandHandler, 
-    ContextTypes, 
-    MessageHandler, 
-    filters
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
 )
 
 # 導入現有的處理器
@@ -39,6 +39,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
 # 統一日誌輸出函數
 def log_message(message, level="INFO"):
     """統一日誌輸出函數"""
@@ -47,6 +48,7 @@ def log_message(message, level="INFO"):
     print(log_line, flush=True)
     sys.stdout.flush()
     return log_line
+
 
 # 驗證配置
 try:
@@ -75,6 +77,7 @@ application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
 
 # === Telegram Bot 指令處理器 ===
 
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """處理 /start 指令"""
     welcome_text = """🤖 **歡迎使用名片管理 Telegram Bot！**
@@ -91,10 +94,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 • 或輸入 /help 查看詳細說明
 
 💡 **提示：** 使用 /batch 開啟批次處理模式"""
-    
+
     await telegram_bot_handler.safe_send_message(
         update.effective_chat.id, welcome_text, parse_mode=ParseMode.MARKDOWN
     )
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """處理 /help 指令"""
@@ -123,25 +127,27 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 • 台灣地址正規化處理
 
 ❓ 有問題請聯繫系統管理員"""
-    
+
     await telegram_bot_handler.safe_send_message(
         update.effective_chat.id, help_text, parse_mode=ParseMode.MARKDOWN
     )
+
 
 async def batch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """處理 /batch 指令 - 開始批次模式"""
     user_id = str(update.effective_user.id)
     result = batch_manager.start_batch_mode(user_id)
-    
+
     await telegram_bot_handler.safe_send_message(
         update.effective_chat.id, result["message"]
     )
+
 
 async def endbatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """處理 /endbatch 指令 - 結束批次模式"""
     user_id = str(update.effective_user.id)
     result = batch_manager.end_batch_mode(user_id)
-    
+
     if result["success"]:
         stats = result["statistics"]
         summary_text = f"""📊 **批次處理完成**
@@ -168,10 +174,11 @@ async def endbatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             update.effective_chat.id, result["message"]
         )
 
+
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """處理 /status 指令 - 查看批次狀態"""
     user_id = str(update.effective_user.id)
-    
+
     if batch_manager.is_in_batch_mode(user_id):
         progress_msg = batch_manager.get_batch_progress_message(user_id)
         await telegram_bot_handler.safe_send_message(
@@ -179,11 +186,13 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
     else:
         await telegram_bot_handler.safe_send_message(
-            update.effective_chat.id, 
-            "您目前不在批次模式中。使用 /batch 開始批次處理。"
+            update.effective_chat.id, "您目前不在批次模式中。使用 /batch 開始批次處理。"
         )
 
-async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+async def handle_text_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """處理文字訊息"""
     user_message = update.message.text.strip()
     user_id = str(update.effective_user.id)
@@ -232,7 +241,10 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_text = "請上傳名片圖片，我會幫您識別並存入 Notion 📸\n\n💡 提示：使用 /batch 可開啟批次處理模式"
         await telegram_bot_handler.safe_send_message(chat_id, reply_text)
 
-async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+async def handle_photo_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """處理圖片訊息 - 名片識別"""
     user_id = str(update.effective_user.id)
     chat_id = update.effective_chat.id
@@ -258,7 +270,7 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         # 下載圖片
         photo = update.message.photo[-1]  # 獲取最高解析度的圖片
         file_result = await telegram_bot_handler.safe_get_file(photo.file_id)
-        
+
         if not file_result["success"]:
             error_msg = f"❗ 無法下載圖片: {file_result['message']}"
             await telegram_bot_handler.safe_send_message(chat_id, error_msg)
@@ -327,7 +339,9 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
         await telegram_bot_handler.safe_send_message(chat_id, error_msg)
 
+
 # === 輔助函數 ===
+
 
 async def _process_single_card_from_multi_format(
     user_id: str, chat_id: int, card_data: dict, is_batch_mode: bool
@@ -398,6 +412,7 @@ async def _process_single_card_from_multi_format(
         error_msg = f"❌ 處理名片時發生錯誤: {str(e)}"
         log_message(error_msg, "ERROR")
         await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+
 
 async def _process_multiple_cards_async(
     user_id: str, chat_id: int, cards_to_process: list, is_batch_mode: bool
@@ -495,14 +510,16 @@ async def _process_multiple_cards_async(
         log_message(error_msg, "ERROR")
         await telegram_bot_handler.safe_send_message(chat_id, error_msg)
 
+
 # === Flask Webhook 處理 ===
+
 
 @flask_app.route("/telegram-webhook", methods=["POST"])
 def telegram_webhook():
     """Telegram Bot webhook 處理"""
     try:
         log_message("📥 收到 Telegram webhook 請求")
-        
+
         # 獲取更新數據
         update_data = request.get_json()
         if not update_data:
@@ -513,45 +530,49 @@ def telegram_webhook():
 
         # 創建 Update 對象並處理
         update = Update.de_json(update_data, application.bot)
-        
+
         # 使用新的事件循環運行異步處理
         import asyncio
         import threading
-        
+
         def run_async_update(update):
             """在新線程中運行異步更新處理"""
             try:
                 # 創建新的事件循環
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
+
                 # 初始化應用並運行異步處理
                 async def process_update_with_init():
                     await application.initialize()
                     await application.process_update(update)
                     await application.shutdown()
-                
+
                 loop.run_until_complete(process_update_with_init())
                 loop.close()
             except Exception as e:
                 log_message(f"❌ 異步處理錯誤: {e}", "ERROR")
-        
+
         # 在後台線程中處理更新
         thread = threading.Thread(target=run_async_update, args=(update,))
         thread.daemon = True
         thread.start()
-        
+
         return "OK", 200
 
     except Exception as e:
         log_message(f"❌ Webhook 處理過程中發生錯誤: {e}", "ERROR")
         import traceback
+
         traceback.print_exc()
         return "Internal Server Error", 500
+
 
 @flask_app.route("/health", methods=["GET"])
 def health_check():
     """健康檢查端點"""
     return {"status": "healthy", "message": "Telegram Bot is running"}
+
 
 @flask_app.route("/test", methods=["GET"])
 def test_services():
@@ -577,6 +598,7 @@ def test_services():
 
     return results
 
+
 @flask_app.route("/", methods=["GET"])
 def index():
     """首頁"""
@@ -584,10 +606,12 @@ def index():
         "message": "Telegram Bot 名片管理系統",
         "status": "running",
         "endpoints": ["/health", "/test", "/telegram-webhook"],
-        "bot_info": "使用 Google Gemini AI 識別名片並存入 Notion"
+        "bot_info": "使用 Google Gemini AI 識別名片並存入 Notion",
     }
 
+
 # === 初始化和啟動 ===
+
 
 def setup_telegram_handlers():
     """設置 Telegram Bot 處理器"""
@@ -597,29 +621,32 @@ def setup_telegram_handlers():
     application.add_handler(CommandHandler("batch", batch_command))
     application.add_handler(CommandHandler("endbatch", endbatch_command))
     application.add_handler(CommandHandler("status", status_command))
-    
+
     # 訊息處理器
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
+    )
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo_message))
-    
+
     log_message("✅ Telegram Bot 處理器設置完成")
+
 
 if __name__ == "__main__":
     # 設置 Telegram Bot 處理器
     setup_telegram_handlers()
-    
+
     # 使用統一日誌輸出
     log_message("🚀 啟動 Telegram Bot 名片管理系統...")
     log_message("📋 使用 Notion 作為資料庫")
     log_message("🤖 使用 Google Gemini AI 識別名片 + 多名片檢測")
     log_message("🎯 支援品質評估和用戶交互選擇")
-    
+
     # 獲取端口配置
     port = int(os.environ.get("PORT", 5003))
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-    
+
     log_message(f"⚡ Telegram Bot 服務啟動中... 端口: {port}, Debug: {debug_mode}")
-    
+
     # 生產環境配置
     flask_app.run(
         host="0.0.0.0",

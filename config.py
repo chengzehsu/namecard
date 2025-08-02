@@ -25,7 +25,7 @@ class Config:
     @classmethod
     def validate_config(cls, bot_type="line"):
         """驗證必要的環境變數是否已設定
-        
+
         Args:
             bot_type: "line" 或 "telegram"，指定要驗證的 bot 類型
         """

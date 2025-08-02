@@ -48,13 +48,15 @@ def test_service_status():
         if response.status_code == 200:
             data = response.json()
             log_test("服務狀態檢查結果:", "INFO")
-            
+
             # 檢查各服務狀態
             services = ["notion", "gemini", "telegram"]
             for service in services:
                 if service in data:
                     status = "SUCCESS" if data[service].get("success") else "ERROR"
-                    message = data[service].get("message", data[service].get("error", "未知"))
+                    message = data[service].get(
+                        "message", data[service].get("error", "未知")
+                    )
                     log_test(f"  {service}: {message}", status)
                 else:
                     log_test(f"  {service}: 未檢測到", "WARNING")
@@ -92,16 +94,16 @@ def test_webhook_post_invalid():
             f"{TELEGRAM_BOT_BASE_URL}/telegram-webhook",
             json={},
             headers={"Content-Type": "application/json"},
-            timeout=10
+            timeout=10,
         )
-        
+
         if response.status_code == 400:
             log_test("POST webhook 空數據正確返回 400", "SUCCESS")
         elif response.status_code == 200:
             log_test("POST webhook 接受了空數據 (可能正常)", "WARNING")
         else:
             log_test(f"POST webhook 返回: HTTP {response.status_code}", "INFO")
-        
+
         return True
     except Exception as e:
         log_test(f"POST webhook 測試異常: {e}", "ERROR")
@@ -111,40 +113,39 @@ def test_webhook_post_invalid():
 def test_webhook_post_mock():
     """測試 POST webhook 模擬 Telegram 更新"""
     log_test("測試 POST /telegram-webhook 模擬數據...", "INFO")
-    
+
     # 模擬 Telegram 更新數據
     mock_update = {
         "update_id": 123456789,
         "message": {
             "message_id": 1,
             "date": int(time.time()),
-            "chat": {
-                "id": 12345,
-                "type": "private"
-            },
+            "chat": {"id": 12345, "type": "private"},
             "from": {
                 "id": 12345,
                 "is_bot": False,
                 "first_name": "Test",
-                "username": "testuser"
+                "username": "testuser",
             },
-            "text": "/start"
-        }
+            "text": "/start",
+        },
     }
-    
+
     try:
         response = requests.post(
             f"{TELEGRAM_BOT_BASE_URL}/telegram-webhook",
             json=mock_update,
             headers={"Content-Type": "application/json"},
-            timeout=15
+            timeout=15,
         )
-        
+
         if response.status_code == 200:
             log_test("POST webhook 模擬數據處理成功", "SUCCESS")
             return True
         else:
-            log_test(f"POST webhook 模擬數據返回: HTTP {response.status_code}", "WARNING")
+            log_test(
+                f"POST webhook 模擬數據返回: HTTP {response.status_code}", "WARNING"
+            )
             if response.text:
                 log_test(f"響應內容: {response.text[:200]}", "INFO")
     except Exception as e:
@@ -173,7 +174,7 @@ def run_all_tests():
     log_test("🚀 開始 Telegram Bot Webhook 測試", "INFO")
     log_test(f"測試目標: {TELEGRAM_BOT_BASE_URL}", "INFO")
     print("=" * 60)
-    
+
     tests = [
         ("健康檢查", test_health_endpoint),
         ("服務狀態", test_service_status),
@@ -182,10 +183,10 @@ def run_all_tests():
         ("POST Webhook (無效)", test_webhook_post_invalid),
         ("POST Webhook (模擬)", test_webhook_post_mock),
     ]
-    
+
     passed = 0
     total = len(tests)
-    
+
     for test_name, test_func in tests:
         print(f"\n📋 執行測試: {test_name}")
         try:
@@ -196,12 +197,14 @@ def run_all_tests():
                 log_test(f"測試 '{test_name}' 失敗", "ERROR")
         except Exception as e:
             log_test(f"測試 '{test_name}' 異常: {e}", "ERROR")
-        
+
         print("-" * 40)
-    
+
     print(f"\n📊 測試結果總結:")
-    log_test(f"通過: {passed}/{total} 個測試", "SUCCESS" if passed == total else "WARNING")
-    
+    log_test(
+        f"通過: {passed}/{total} 個測試", "SUCCESS" if passed == total else "WARNING"
+    )
+
     if passed == total:
         log_test("🎉 所有測試都通過了！Telegram Bot 運行正常", "SUCCESS")
         return True
@@ -212,7 +215,8 @@ def run_all_tests():
 
 def main():
     """主函數"""
-    print(f"""
+    print(
+        f"""
 🤖 Telegram Bot Webhook 測試工具
 ================================
 測試時間: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
@@ -222,8 +226,9 @@ def main():
 1. 請確保 Telegram Bot 應用已經啟動
 2. 如果測試生產環境，請更新 TELEGRAM_BOT_BASE_URL
 3. 某些測試可能需要有效的 API 配置
-""")
-    
+"""
+    )
+
     try:
         success = run_all_tests()
         exit_code = 0 if success else 1
@@ -233,7 +238,7 @@ def main():
     except Exception as e:
         log_test(f"測試過程中發生未預期的錯誤: {e}", "ERROR")
         exit_code = 1
-    
+
     print(f"\n🏁 測試完成，退出代碼: {exit_code}")
     sys.exit(exit_code)
 
