@@ -56,6 +56,9 @@ jobs:
     - name: 快速語法檢查
       run: |
         echo "🔍 執行快速語法檢查..."
+        python -m py_compile main.py
+        echo "✅ main.py 語法檢查通過"
+        
         python -m py_compile telegram_app.py
         echo "✅ telegram_app.py 語法檢查通過"
         
@@ -70,7 +73,7 @@ jobs:
         echo "📋 檢查部署必要文件..."
         
         # 檢查必要文件
-        files=("telegram_app.py" "requirements-telegram.txt" "config.py")
+        files=("main.py" "telegram_app.py" "requirements-telegram.txt" "config.py")
         for file in "${files[@]}"; do
           if [ -f "$file" ]; then
             echo "✅ $file 存在"
@@ -147,7 +150,7 @@ jobs:
           "name": "namecard-telegram-bot",
           "type": "python",
           "buildCommand": "pip install -r requirements-telegram.txt",
-          "startCommand": "python telegram_app.py",
+          "startCommand": "python main.py",
           "environment": {
             "PYTHON_VERSION": "3.9",
             "PORT": "5003",
