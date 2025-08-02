@@ -133,18 +133,27 @@ jobs:
       run: |
         echo "部署 Telegram Bot 到 Zeabur..."
         
-        # 設置環境變數到當前 shell（用於部署）
-        export TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-        export GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}"
-        export GOOGLE_API_KEY_FALLBACK="${{ secrets.GOOGLE_API_KEY_FALLBACK }}"
-        export NOTION_API_KEY="${{ secrets.NOTION_API_KEY }}"
-        export NOTION_DATABASE_ID="${{ secrets.NOTION_DATABASE_ID }}"
-        export GEMINI_MODEL="gemini-2.5-pro"
-        
-        # 使用 Zeabur CLI 部署（會讀取 zeabur.json）
+        # 首先部署應用
         zeabur deploy
-          
-        echo "✅ 部署完成"
+        
+        echo "⚙️ 設置環境變數到 Zeabur 服務..."
+        
+        # 設置環境變數到 Zeabur 服務
+        zeabur env set TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        zeabur env set GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}"
+        zeabur env set GOOGLE_API_KEY_FALLBACK="${{ secrets.GOOGLE_API_KEY_FALLBACK }}"
+        zeabur env set NOTION_API_KEY="${{ secrets.NOTION_API_KEY }}"
+        zeabur env set NOTION_DATABASE_ID="${{ secrets.NOTION_DATABASE_ID }}"
+        zeabur env set GEMINI_MODEL="gemini-2.5-pro"
+        zeabur env set PORT="5003"
+        zeabur env set FLASK_ENV="production"
+        zeabur env set PYTHONUNBUFFERED="1"
+        zeabur env set SERVICE_TYPE="telegram-bot"
+        
+        echo "🔄 重啟服務以套用環境變數..."
+        zeabur service restart
+        
+        echo "✅ 部署和環境變數設置完成"
         
     - name: ⏳ 等待服務啟動
       run: |
@@ -155,33 +164,47 @@ jobs:
       run: |
         echo "執行 Telegram Bot 健康檢查..."
         
-        # 獲取部署 URL（嘗試多種方法）
-        DEPLOY_URL=$(zeabur service list | grep -o 'https://[^[:space:]]*' | head -1)
+        # 獲取部署 URL（使用 Zeabur CLI）
+        DEPLOY_URL=$(zeabur service info --format json | jq -r '.url // empty' 2>/dev/null)
         
+        # 如果第一種方法失敗，嘗試其他方法
         if [[ -z "$DEPLOY_URL" ]]; then
-          echo "⚠️ 無法獲取部署 URL，跳過健康檢查"
-          exit 0
+          DEPLOY_URL=$(zeabur service list | grep -o 'https://[^[:space:]]*' | head -1)
+        fi
+        
+        # 如果還是沒有 URL，嘗試使用專案名稱構建 URL
+        if [[ -z "$DEPLOY_URL" ]]; then
+          DEPLOY_URL="https://namecard-app.zeabur.app"
+          echo "⚠️ 使用預設 URL: $DEPLOY_URL"
         fi
         
         echo "🌐 Telegram Bot URL: $DEPLOY_URL"
         
         # 健康檢查
-        max_retries=5
+        max_retries=10
         retry_count=0
         
         while [[ $retry_count -lt $max_retries ]]; do
-          if curl -f -s "$DEPLOY_URL/health" > /dev/null; then
+          echo "⏳ 健康檢查嘗試 $((retry_count + 1))/$max_retries..."
+          
+          if curl -f -s --max-time 30 "$DEPLOY_URL/health" > /dev/null; then
             echo "✅ Telegram Bot 健康檢查通過"
+            
+            # 顯示健康檢查詳細資訊
+            HEALTH_INFO=$(curl -s "$DEPLOY_URL/health" 2>/dev/null || echo "無法獲取健康資訊")
+            echo "📊 健康檢查詳情: $HEALTH_INFO"
             break
           else
             retry_count=$((retry_count + 1))
-            echo "⏳ 健康檢查失敗，重試 $retry_count/$max_retries..."
-            sleep 10
+            echo "❌ 健康檢查失敗，等待 15 秒後重試..."
+            sleep 15
           fi
         done
         
         if [[ $retry_count -eq $max_retries ]]; then
           echo "❌ Telegram Bot 健康檢查最終失敗"
+          echo "🔍 嘗試獲取服務日誌..."
+          zeabur service logs --lines 50 || echo "無法獲取服務日誌"
           exit 1
         fi
         

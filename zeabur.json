@@ -12,8 +12,24 @@
     "FLASK_ENV": "production",
     "PYTHONUNBUFFERED": "1",
     "SERVICE_TYPE": "telegram-bot",
-    "BUILD_ID": "20250802-1420"
+    "BUILD_ID": "20250802-1420",
+    "TELEGRAM_BOT_TOKEN": "",
+    "GOOGLE_API_KEY": "",
+    "GOOGLE_API_KEY_FALLBACK": "",
+    "NOTION_API_KEY": "",
+    "NOTION_DATABASE_ID": "",
+    "GEMINI_MODEL": "gemini-2.5-pro"
   },
   "region": "hkg",
-  "restart": "always"
+  "restart": "always",
+  "scale": {
+    "minInstances": 1,
+    "maxInstances": 2
+  },
+  "healthCheck": {
+    "path": "/health",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3
+  }
 }
