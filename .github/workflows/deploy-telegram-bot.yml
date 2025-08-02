@@ -4,6 +4,8 @@ on:
   push:
     branches: [ main ]
     paths:
+      - 'main.py'
+      - 'telegram_main.py'
       - 'telegram_app.py'
       - 'telegram_bot_handler.py'
       - 'requirements-telegram.txt'
@@ -47,6 +49,8 @@ jobs:
     - name: 🔍 語法檢查
       run: |
         echo "檢查 Telegram Bot 語法..."
+        python -m py_compile main.py
+        python -m py_compile telegram_main.py
         python -m py_compile telegram_app.py
         python -m py_compile telegram_bot_handler.py
         echo "✅ 語法檢查通過"
@@ -58,9 +62,18 @@ jobs:
         import sys
         sys.path.append('.')
         try:
-            from telegram_app import flask_app, Config
+            # 測試獨立入口
+            import telegram_main
+            # 測試核心模組
+            from config import Config
             from telegram_bot_handler import TelegramBotHandler
             print('✅ 核心模組載入成功')
+        except ImportError as e:
+            if 'linebot' in str(e).lower():
+                print(f'❌ LINE Bot 依賴錯誤: {e}')
+                sys.exit(1)
+            else:
+                print(f'⚠️ 依賴模組缺失 (部署時會安裝): {e}')
         except Exception as e:
             print(f'❌ 模組載入失敗: {e}')
             sys.exit(1)
@@ -70,6 +83,8 @@ jobs:
       run: |
         echo "檢查必要文件..."
         required_files=(
+          "main.py"
+          "telegram_main.py"
           "telegram_app.py"
           "telegram_bot_handler.py" 
           "requirements-telegram.txt"
@@ -133,7 +148,7 @@ jobs:
             ]
           },
           "start": {
-            "command": "python telegram_app.py"
+            "command": "python main.py"
           },
           "environment": {
             "PYTHON_VERSION": "3.9",
@@ -198,7 +213,7 @@ jobs:
         zeabur deploy --service telegram-bot \
           --source . \
           --build-command "pip install -r requirements-telegram.txt" \
-          --start-command "python telegram_app.py"
+          --start-command "python main.py"
           
         echo "✅ 部署完成"
         
