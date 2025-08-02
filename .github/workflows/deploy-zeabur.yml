@@ -171,21 +171,29 @@ jobs:
     - name: 部署到 Zeabur
       id: deploy
       run: |
-        echo "🚀 開始部署到 Zeabur..."
+        echo "🚀 開始部署到 Zeabur (更新現有服務)..."
         
-        PROJECT_NAME="namecard-telegram-bot"
+        # 使用現有的專案和服務名稱
+        PROJECT_NAME="namecard"
         SERVICE_NAME="namecard-app"
         
-        # 檢查專案是否存在，不存在則創建
+        echo "📋 目標配置:"
+        echo "- 專案: $PROJECT_NAME"
+        echo "- 服務: $SERVICE_NAME" 
+        echo "- URL: https://namecard-app.zeabur.app"
+        echo "- 應用類型: Telegram Bot (main.py)"
+        
+        # 檢查專案是否存在
         if ! $HOME/.zeabur/bin/zeabur project list | grep -q "$PROJECT_NAME"; then
-          echo "📁 創建新專案: $PROJECT_NAME"
-          $HOME/.zeabur/bin/zeabur project create "$PROJECT_NAME"
+          echo "❌ 專案不存在: $PROJECT_NAME"
+          echo "請確認專案名稱或手動創建專案"
+          exit 1
         else
           echo "✅ 專案已存在: $PROJECT_NAME"
         fi
         
-        # 部署服務
-        echo "🔧 部署服務..."
+        # 部署到現有服務 (這會更新現有服務而不是創建新的)
+        echo "🔧 更新現有服務到 Telegram Bot..."
         DEPLOY_OUTPUT=$($HOME/.zeabur/bin/zeabur service deploy \
           --project="$PROJECT_NAME" \
           --service="$SERVICE_NAME" \
@@ -194,18 +202,12 @@ jobs:
         
         echo "$DEPLOY_OUTPUT"
         
-        # 提取部署 URL (假設輸出包含 URL)
-        APP_URL=$(echo "$DEPLOY_OUTPUT" | grep -oP 'https://[^\s]+' | head -1)
-        
-        if [ -n "$APP_URL" ]; then
-          echo "✅ 部署成功!"
-          echo "🔗 應用 URL: $APP_URL"
-          echo "app_url=$APP_URL" >> $GITHUB_OUTPUT
-        else
-          echo "⚠️ 部署完成，但無法提取 URL"
-          echo "請前往 Zeabur Dashboard 查看: https://dash.zeabur.com/"
-          echo "app_url=https://dash.zeabur.com/" >> $GITHUB_OUTPUT
-        fi
+        # 使用已知的 URL
+        APP_URL="https://namecard-app.zeabur.app"
+        echo "✅ 部署完成!"
+        echo "🔗 應用 URL: $APP_URL"
+        echo "📝 服務已更新為 Telegram Bot 配置"
+        echo "app_url=$APP_URL" >> $GITHUB_OUTPUT
         
     - name: 設置環境變數
       env:
@@ -217,7 +219,7 @@ jobs:
       run: |
         echo "🔧 設置 Zeabur 環境變數..."
         
-        PROJECT_NAME="namecard-telegram-bot"
+        PROJECT_NAME="namecard"
         SERVICE_NAME="namecard-app"
         
         # 設置所有必要的環境變數
