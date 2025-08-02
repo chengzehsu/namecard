@@ -1,0 +1,303 @@
+name: 部署 Telegram Bot 到 Zeabur
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'telegram_app.py'
+      - 'telegram_bot_handler.py'
+      - 'requirements-telegram.txt'
+      - '.github/workflows/deploy-telegram-bot.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署環境'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+      force_deploy:
+        description: '強制部署 (跳過預檢查)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  pre-deploy-checks:
+    name: 📋 預部署檢查
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.force_deploy }}
+    
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      
+    - name: 🐍 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 安裝依賴
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements-telegram.txt
+        
+    - name: 🔍 語法檢查
+      run: |
+        echo "檢查 Telegram Bot 語法..."
+        python -m py_compile telegram_app.py
+        python -m py_compile telegram_bot_handler.py
+        echo "✅ 語法檢查通過"
+        
+    - name: 🧪 核心模組驗證
+      run: |
+        echo "驗證核心模組..."
+        python -c "
+        import sys
+        sys.path.append('.')
+        try:
+            from telegram_app import flask_app, Config
+            from telegram_bot_handler import TelegramBotHandler
+            print('✅ 核心模組載入成功')
+        except Exception as e:
+            print(f'❌ 模組載入失敗: {e}')
+            sys.exit(1)
+        "
+        
+    - name: 📁 檢查必要文件
+      run: |
+        echo "檢查必要文件..."
+        required_files=(
+          "telegram_app.py"
+          "telegram_bot_handler.py" 
+          "requirements-telegram.txt"
+          "name_card_processor.py"
+          "notion_manager.py"
+          "batch_manager.py"
+          "multi_card_processor.py"
+          "user_interaction_handler.py"
+          "address_normalizer.py"
+          "config.py"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [[ -f "$file" ]]; then
+            echo "✅ $file 存在"
+          else
+            echo "❌ $file 缺失"
+            exit 1
+          fi
+        done
+
+  deploy-telegram-bot:
+    name: 🚀 部署 Telegram Bot
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.result == 'success' || needs.pre-deploy-checks.result == 'skipped')
+    
+    environment: ${{ inputs.environment || 'production' }}
+    
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      
+    - name: 🛠️ 安裝 Zeabur CLI
+      run: |
+        echo "安裝 Zeabur CLI..."
+        npm install -g @zeabur/cli
+        zeabur --version
+        
+    - name: 🔐 配置 Zeabur 認證
+      run: |
+        echo "配置 Zeabur 認證..."
+        echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
+        
+    - name: 📝 創建 Telegram Bot 部署配置
+      run: |
+        echo "創建 Telegram Bot 專用部署配置..."
+        cat > zeabur-telegram.json << EOF
+        {
+          "name": "namecard-telegram-bot",
+          "type": "python",
+          "source": {
+            "type": "git",
+            "url": "${{ github.server_url }}/${{ github.repository }}",
+            "branch": "${{ github.ref_name }}"
+          },
+          "build": {
+            "commands": [
+              "pip install --upgrade pip",
+              "pip install -r requirements-telegram.txt"
+            ]
+          },
+          "start": {
+            "command": "python telegram_app.py"
+          },
+          "environment": {
+            "PYTHON_VERSION": "3.9",
+            "PORT": "5003",
+            "FLASK_ENV": "production"
+          },
+          "regions": ["hkg"],
+          "scaling": {
+            "minInstances": 1,
+            "maxInstances": 2
+          }
+        }
+        EOF
+        
+    - name: 🎯 創建或更新 Zeabur 專案
+      run: |
+        echo "管理 Zeabur 專案..."
+        
+        # 嘗試創建新專案，如果已存在則更新
+        if zeabur project create namecard-telegram-bot 2>/dev/null; then
+          echo "✅ 創建新專案: namecard-telegram-bot"
+        else
+          echo "📝 專案已存在，將進行更新"
+        fi
+        
+        # 設置專案為當前專案
+        zeabur project use namecard-telegram-bot
+        
+    - name: 🔧 創建或更新服務
+      run: |
+        echo "管理 Zeabur 服務..."
+        
+        # 創建服務，如果已存在則更新
+        if zeabur service create telegram-bot --type python 2>/dev/null; then
+          echo "✅ 創建新服務: telegram-bot"
+        else
+          echo "📝 服務已存在，將進行更新"
+        fi
+        
+    - name: ⚙️ 設置環境變數
+      run: |
+        echo "設置 Telegram Bot 環境變數..."
+        
+        # 設置所有必要的環境變數
+        zeabur env set TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        zeabur env set GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}"
+        zeabur env set GOOGLE_API_KEY_FALLBACK="${{ secrets.GOOGLE_API_KEY_FALLBACK }}"
+        zeabur env set NOTION_API_KEY="${{ secrets.NOTION_API_KEY }}"
+        zeabur env set NOTION_DATABASE_ID="${{ secrets.NOTION_DATABASE_ID }}"
+        zeabur env set GEMINI_MODEL="gemini-2.5-pro"
+        zeabur env set PORT="5003"
+        zeabur env set FLASK_DEBUG="false"
+        zeabur env set FLASK_ENV="production"
+        
+        echo "✅ 環境變數設置完成"
+        
+    - name: 🚀 部署服務
+      run: |
+        echo "部署 Telegram Bot 到 Zeabur..."
+        
+        # 執行部署
+        zeabur deploy --service telegram-bot \
+          --source . \
+          --build-command "pip install -r requirements-telegram.txt" \
+          --start-command "python telegram_app.py"
+          
+        echo "✅ 部署完成"
+        
+    - name: ⏳ 等待服務啟動
+      run: |
+        echo "等待 Telegram Bot 服務啟動..."
+        sleep 60
+        
+    - name: 🔍 健康檢查
+      run: |
+        echo "執行 Telegram Bot 健康檢查..."
+        
+        # 獲取部署 URL
+        DEPLOY_URL=$(zeabur service info telegram-bot --format json | jq -r '.url // empty')
+        
+        if [[ -z "$DEPLOY_URL" ]]; then
+          echo "⚠️ 無法獲取部署 URL，跳過健康檢查"
+          exit 0
+        fi
+        
+        echo "🌐 Telegram Bot URL: $DEPLOY_URL"
+        
+        # 健康檢查
+        max_retries=5
+        retry_count=0
+        
+        while [[ $retry_count -lt $max_retries ]]; do
+          if curl -f -s "$DEPLOY_URL/health" > /dev/null; then
+            echo "✅ Telegram Bot 健康檢查通過"
+            break
+          else
+            retry_count=$((retry_count + 1))
+            echo "⏳ 健康檢查失敗，重試 $retry_count/$max_retries..."
+            sleep 10
+          fi
+        done
+        
+        if [[ $retry_count -eq $max_retries ]]; then
+          echo "❌ Telegram Bot 健康檢查最終失敗"
+          exit 1
+        fi
+        
+    - name: 🧪 部署後測試
+      run: |
+        echo "執行 Telegram Bot 部署後測試..."
+        
+        # 獲取部署 URL
+        DEPLOY_URL=$(zeabur service info telegram-bot --format json | jq -r '.url // empty')
+        
+        if [[ -z "$DEPLOY_URL" ]]; then
+          echo "⚠️ 無法獲取部署 URL，跳過測試"
+          exit 0
+        fi
+        
+        # 測試主要端點
+        echo "🔍 測試健康檢查端點..."
+        curl -f "$DEPLOY_URL/health" || exit 1
+        
+        echo "🔍 測試服務狀態端點..."
+        curl -f "$DEPLOY_URL/test" || exit 1
+        
+        echo "🔍 測試 webhook 端點..."
+        curl -f -X POST "$DEPLOY_URL/telegram-webhook" \
+          -H "Content-Type: application/json" \
+          -d '{}' || echo "預期的 400 錯誤"
+        
+        echo "✅ 所有測試通過"
+        
+    - name: 📤 部署結果通知
+      run: |
+        echo "📊 Telegram Bot 部署結果:"
+        echo "📅 部署時間: $(date)"
+        echo "🌿 分支: ${{ github.ref_name }}"
+        echo "📝 提交: ${{ github.sha }}"
+        echo "👤 觸發者: ${{ github.actor }}"
+        echo "🏷️ 環境: ${{ inputs.environment || 'production' }}"
+        
+        # 獲取部署 URL
+        DEPLOY_URL=$(zeabur service info telegram-bot --format json | jq -r '.url // empty' 2>/dev/null || echo "無法獲取")
+        echo "🌐 Telegram Bot URL: $DEPLOY_URL"
+        
+        echo ""
+        echo "🎉 Telegram Bot 部署成功！"
+        echo ""
+        echo "📱 下一步："
+        echo "1. 更新 Telegram Bot webhook URL:"
+        echo "   curl -X POST \"https://api.telegram.org/bot<BOT_TOKEN>/setWebhook\" -d \"url=$DEPLOY_URL/telegram-webhook\""
+        echo "2. 測試 Bot 功能是否正常"
+        echo "3. 監控應用日誌和錯誤"
+
+  cleanup:
+    name: 🧹 清理
+    runs-on: ubuntu-latest
+    needs: [deploy-telegram-bot]
+    if: always()
+    
+    steps:
+    - name: 🗑️ 清理臨時文件
+      run: |
+        echo "清理部署過程中的臨時文件..."
+        rm -f zeabur-telegram.json
+        echo "✅ 清理完成"

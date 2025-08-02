@@ -1,13 +1,15 @@
-# 名片管理 LINE Bot - Claude 開發記錄
+# 名片管理系統 - Claude 開發記錄
 
 ## 📋 專案概述
 
-這是一個基於 LINE Bot 的智能名片管理系統，使用 Google Gemini AI 識別名片內容，並自動存入 Notion 資料庫。支援單張處理和批次處理模式，並整合 GitHub Actions 實現 CI/CD 自動化和 Claude Code AI 驅動開發。
+這是一個智能名片管理系統，支援 **LINE Bot** 和 **Telegram Bot** 雙平台，使用 Google Gemini AI 識別名片內容，並自動存入 Notion 資料庫。支援單張處理、批次處理模式、多名片檢測，並整合 GitHub Actions 實現 CI/CD 自動化和 Claude Code AI 驅動開發。**所有敏感的 API Keys 均透過 GitHub Actions Secrets 安全管理，不會暴露在代碼中。**
 
 ## 🏗️ 系統架構
 
 ```
-LINE Bot Webhook (Flask)
+Multi-Platform Bot System
+├── LINE Bot Webhook (Flask) - app.py
+├── Telegram Bot Webhook (Flask) - telegram_app.py 🆕
     ↓
 名片圖片處理 (Google Gemini AI)
     ↓
@@ -17,7 +19,7 @@ LINE Bot Webhook (Flask)
     ↓
 批次狀態管理 (內存管理)
     ↓
-GitHub Actions CI/CD Pipeline
+GitHub Actions CI/CD Pipeline (安全 Token 管理) 🆕
     ↓
 Claude Code AI 自動化 (功能開發、測試、部署)
 ```
@@ -27,25 +29,35 @@ Claude Code AI 自動化 (功能開發、測試、部署)
 ```
 namecard/
 ├── app.py                          # Flask 主應用，LINE Bot webhook 處理
-├── config.py                       # 配置文件管理
+├── telegram_app.py                 # Flask Telegram Bot 應用 🆕
+├── config.py                       # 配置文件管理 (支援雙平台)
 ├── name_card_processor.py          # Gemini AI 名片識別處理器
 ├── notion_manager.py               # Notion 資料庫操作管理器
 ├── batch_manager.py                # 批次處理狀態管理器
 ├── address_normalizer.py           # 地址正規化處理器 (NEW)
+├── line_bot_handler.py             # LINE Bot API 錯誤處理包裝器 🆕
+├── telegram_bot_handler.py         # Telegram Bot API 錯誤處理包裝器 🆕
 ├── pr_creator.py                   # PR 自動創建功能
-├── test_new_webhook.py             # Webhook 測試工具
+├── test_new_webhook.py             # LINE Bot Webhook 測試工具
+├── test_telegram_webhook.py        # Telegram Bot 測試工具 🆕
 ├── test_address_normalizer.py      # 地址正規化測試 (NEW)
-├── test_simple_error_handling.py   # LINE Bot API 錯誤處理測試 (NEW) 🆕
-├── line_bot_handler.py             # LINE Bot API 錯誤處理包裝器 (NEW) 🆕
-├── format_code.sh                  # 代碼格式化腳本 (NEW) 🆕
-├── .pre-commit-config.yaml         # Pre-commit hooks 配置 (NEW) 🆕
+├── test_simple_error_handling.py   # LINE Bot API 錯誤處理測試 🆕
+├── format_code.sh                  # 代碼格式化腳本 🆕
+├── .pre-commit-config.yaml         # Pre-commit hooks 配置 🆕
+├── .env.example                    # 環境變數範例文件
+├── .env.telegram.example           # Telegram Bot 環境變數範例 🆕
 ├── .github/
 │   └── workflows/
 │       ├── ci-cd.yml               # CI/CD 自動化流程 (含自動格式化) 🆕
+│       ├── deploy-zeabur.yml       # Zeabur 部署自動化 🆕
+│       ├── deploy-telegram-bot.yml # Telegram Bot 專用部署 🆕
 │       └── claude-code.yml         # Claude Code AI 自動化
-├── requirements.txt                # Python 依賴列表
-├── Procfile                        # Heroku 部署配置
+├── requirements.txt                # Python 依賴列表 (LINE Bot)
+├── requirements-telegram.txt       # Telegram Bot 專用依賴 🆕
+├── Procfile                        # Heroku 部署配置 (LINE Bot)
+├── Procfile.telegram               # Telegram Bot 部署配置 🆕
 ├── railway_app.py                  # Railway 部署入口
+├── README-TELEGRAM.md              # Telegram Bot 詳細說明 🆕
 └── CLAUDE.md                       # 本文件 (開發指導原則)
 ```
 
@@ -59,6 +71,25 @@ namecard/
   - `GET /test` - 服務測試
   - `GET /api-status` - API 狀態監控 🆕
 - **特色**: 支援批次模式和單張模式，內建 API 錯誤處理 🆕
+
+### 1b. Telegram Bot 處理器 (telegram_app.py) 🆕
+- **功能**: 接收 Telegram webhook，處理指令和圖片訊息
+- **端點**: 
+  - `POST /telegram-webhook` - Telegram webhook 回調
+  - `GET /health` - 健康檢查
+  - `GET /test` - 服務測試
+  - `GET /` - 首頁資訊
+- **指令**: 
+  - `/start` - 歡迎訊息
+  - `/help` - 使用說明
+  - `/batch` - 開啟批次模式
+  - `/endbatch` - 結束批次處理
+  - `/status` - 查看批次狀態
+- **特色**: 
+  - 完整的異步事件循環處理
+  - 與 LINE Bot 共享核心邏輯
+  - 獨立的錯誤處理和重試機制
+  - 支援 Markdown 格式訊息
 
 ### 2. 名片識別處理器 (name_card_processor.py)
 - **AI 模型**: Google Gemini AI
@@ -257,46 +288,183 @@ namecard/
 - 回覆完整選項文字
 - 使用簡化指令 (重拍、繼續、確定)
 
+## 🤖 Telegram Bot 指令 🆕
+
+| 指令 | 功能 | 範例 |
+|------|------|------|
+| `/start` | 開始使用，顯示歡迎訊息和功能介紹 | `/start` |
+| `/help` | 顯示詳細使用說明和功能特色 | `/help` |
+| `/batch` | 啟動批次處理模式 | `/batch` |
+| `/endbatch` | 結束批次並顯示統計報告 | `/endbatch` |
+| `/status` | 查看批次處理進度和狀態 | `/status` |
+| 圖片上傳 | 智能名片識別處理 🆕 | [發送圖片] |
+
+### 🎯 Telegram Bot 特色功能
+
+- **✨ Markdown 支援**: 回應訊息支援豐富的 Markdown 格式
+- **🔄 異步處理**: 完整的異步事件循環，處理效能更佳
+- **🛡️ 錯誤處理**: 內建重試機制和降級服務
+- **📊 詳細統計**: 批次處理完成後提供詳細統計報告
+- **🎨 友好界面**: 清晰的指令提示和操作引導
+- **🔗 共享邏輯**: 與 LINE Bot 共享核心名片處理邏輯
+
+### 📱 Telegram Bot 互動流程
+
+```
+用戶發送 /start
+    ↓
+顯示歡迎訊息和功能介紹
+    ↓
+用戶上傳名片圖片
+    ↓
+智能 AI 分析 (與 LINE Bot 相同)
+    ↓
+品質評估和多名片檢測 
+    ↓
+自動處理或用戶選擇
+    ↓
+存入 Notion 並回應結果 (Markdown 格式)
+```
+
 ## 🔧 環境配置
 
 ### 必要環境變數
+
+#### LINE Bot 配置
 ```bash
 # LINE Bot 配置
 LINE_CHANNEL_ACCESS_TOKEN=your_line_channel_access_token
 LINE_CHANNEL_SECRET=your_line_channel_secret
+```
 
+#### Telegram Bot 配置 🆕
+```bash
+# Telegram Bot 配置
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+```
+
+#### 共用 AI 和資料庫配置
+```bash
 # Google Gemini AI 配置
 GOOGLE_API_KEY=your_google_api_key
 GOOGLE_API_KEY_FALLBACK=your_fallback_google_api_key  # 🆕 備用 API Key
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-2.5-pro
 
 # Notion 配置
 NOTION_API_KEY=your_notion_api_key
 NOTION_DATABASE_ID=your_notion_database_id
 ```
 
-### GitHub Actions Secrets 配置
-```bash
-# GitHub Repository Settings > Secrets and variables > Actions
+### 🔐 GitHub Actions Secrets 配置 (Token 安全管理) 🆕
 
-# 必要 Secrets (用於 CI/CD)
-GITHUB_TOKEN                    # 自動提供，用於 GitHub API 訪問
+**重要安全原則**: 所有敏感的 API Keys 和 Tokens 都儲存在 GitHub Actions Secrets 中，絕不暴露在代碼或 .env 文件中。
+
+#### 配置位置
+```
+GitHub Repository → Settings → Secrets and variables → Actions
+```
+
+#### 必要 Secrets 清單
+```bash
+# ==========================================
+# Bot 平台 API Keys (必要)
+# ==========================================
+# LINE Bot
 LINE_CHANNEL_ACCESS_TOKEN      # LINE Bot API 權杖
-LINE_CHANNEL_SECRET            # LINE Bot 驗證密鑰  
+LINE_CHANNEL_SECRET            # LINE Bot 驗證密鑰
+
+# Telegram Bot 🆕
+TELEGRAM_BOT_TOKEN             # Telegram Bot API 權杖
+
+# ==========================================
+# AI 服務 API Keys (必要)
+# ==========================================
 GOOGLE_API_KEY                 # Google Gemini AI API 金鑰 (主要)
 GOOGLE_API_KEY_FALLBACK        # Google Gemini AI API 金鑰 (備用) 🆕
+
+# ==========================================
+# 資料庫服務 (必要)
+# ==========================================
 NOTION_API_KEY                 # Notion 整合 API 金鑰
 NOTION_DATABASE_ID             # Notion 資料庫 ID
 
-# Claude Code AI 自動化 (可選)
-ANTHROPIC_API_KEY              # Claude AI API 金鑰 (推薦)
-OPENAI_API_KEY                 # OpenAI API 金鑰 (備用)
-
-# 部署相關 (依平台而定)
+# ==========================================
+# 部署平台 Tokens (依需求)
+# ==========================================
 ZEABUR_TOKEN                   # Zeabur 部署權杖 (推薦)
 RAILWAY_TOKEN                  # Railway 部署權杖 (備用)
 HEROKU_API_KEY                 # Heroku 部署 API 金鑰 (傳統)
+
+# ==========================================
+# Claude Code AI 自動化 (可選)
+# ==========================================
+ANTHROPIC_API_KEY              # Claude AI API 金鑰 (推薦)
+OPENAI_API_KEY                 # OpenAI API 金鑰 (備用)
+
+# ==========================================
+# 系統自動提供
+# ==========================================
+GITHUB_TOKEN                   # 自動提供，用於 GitHub API 訪問
 ```
+
+#### 🛡️ Token 安全管理最佳實踐
+
+1. **絕不在代碼中硬編碼 API Keys**
+   - ✅ 使用 GitHub Actions Secrets
+   - ✅ 本地開發使用 `.env` 文件 (已加入 .gitignore)
+   - ❌ 絕不提交真實 API Keys 到 Git
+
+2. **定期輪換 API Keys**
+   - 每 3-6 個月輪換一次
+   - 發現洩露時立即輪換
+   - 舊 Key 停用前確保新 Key 已部署
+
+3. **最小權限原則**
+   - API Keys 只授予必要的最小權限
+   - 定期檢查權限範圍
+   - 移除不必要的權限
+
+4. **監控和警報**
+   - 設置 API 使用量監控
+   - 異常使用模式警報
+   - 失敗率超過閾值時通知
+
+#### 📋 Secrets 設置步驟
+
+1. **前往 GitHub Repository**
+   ```
+   https://github.com/your-username/your-repo/settings/secrets/actions
+   ```
+
+2. **點擊 "New repository secret"**
+
+3. **逐一添加所有必要的 Secrets**
+   - Name: `TELEGRAM_BOT_TOKEN`
+   - Secret: `8026190410:AAHpj5CBPP-eXpo-WJs6uwWRw22kUVdf3d4`
+   - (重複以上步驟設置所有 Secrets)
+
+4. **驗證設置**
+   - 確保所有必要的 Secrets 都已設置
+   - 檢查 Secret 名稱拼寫正確
+   - 測試部署流程是否正常運作
+
+#### 🚀 自動部署中的 Token 使用
+
+GitHub Actions workflows 會自動從 Secrets 中讀取 API Keys：
+
+```yaml
+# 在 GitHub Actions 中安全使用 Tokens
+env:
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+  NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+```
+
+所有部署流程都會：
+- ✅ 自動從 GitHub Secrets 獲取 API Keys
+- ✅ 安全地設置到部署環境
+- ✅ 不在日誌中暴露敏感信息
+- ✅ 部署完成後清理臨時變數
 
 ### GitHub Actions 使用指南
 
