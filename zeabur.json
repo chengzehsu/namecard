@@ -1,32 +1,21 @@
 {
-  "name": "namecard-app",
+  "name": "telegram-bot",
   "build": {
     "command": "pip install -r requirements-telegram.txt"
   },
   "start": {
     "command": "python main.py"
   },
+  "port": 5003,
   "environment": {
     "PORT": "5003",
     "PYTHON_VERSION": "3.9",
     "FLASK_ENV": "production",
     "PYTHONUNBUFFERED": "1",
-    "SERVICE_TYPE": "telegram-bot",
-    "BUILD_ID": "20250802-1420",
-    "TELEGRAM_BOT_TOKEN": "",
-    "GOOGLE_API_KEY": "",
-    "GOOGLE_API_KEY_FALLBACK": "",
-    "NOTION_API_KEY": "",
-    "NOTION_DATABASE_ID": "",
-    "GEMINI_MODEL": "gemini-2.5-pro"
+    "SERVICE_TYPE": "telegram-bot"
   },
-  "region": "hkg",
-  "restart": "always",
-  "scale": {
-    "minInstances": 1,
-    "maxInstances": 2
-  },
-  "healthCheck": {
+  "regions": ["hkg"],
+  "healthcheck": {
     "path": "/health",
     "interval": 30,
     "timeout": 10,
