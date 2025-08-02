@@ -132,13 +132,17 @@ jobs:
         echo "$HOME/.zeabur/bin" >> $GITHUB_PATH
         
         # 驗證安裝
-        $HOME/.zeabur/bin/zeabur --version
+        $HOME/.zeabur/bin/zeabur version
         
     - name: 配置 Zeabur 認證
       run: |
         echo "🔐 配置 Zeabur 認證..."
-        echo "$ZEABUR_TOKEN" | $HOME/.zeabur/bin/zeabur auth login --token
-        echo "✅ Zeabur 認證成功"
+        if $HOME/.zeabur/bin/zeabur auth login --token "$ZEABUR_TOKEN"; then
+          echo "✅ Zeabur 認證成功"
+        else
+          echo "❌ Zeabur 認證失敗"
+          exit 1
+        fi
         
     - name: 創建部署配置
       run: |
@@ -184,6 +188,9 @@ jobs:
         echo "- 應用類型: Telegram Bot (main.py)"
         
         # 檢查專案是否存在
+        echo "📋 列出所有專案:"
+        $HOME/.zeabur/bin/zeabur project list
+        
         if ! $HOME/.zeabur/bin/zeabur project list | grep -q "$PROJECT_NAME"; then
           echo "❌ 專案不存在: $PROJECT_NAME"
           echo "請確認專案名稱或手動創建專案"
@@ -192,15 +199,23 @@ jobs:
           echo "✅ 專案已存在: $PROJECT_NAME"
         fi
         
-        # 部署到現有服務 (這會更新現有服務而不是創建新的)
+        # 部署到現有服務 (使用正確的 zeabur deploy 命令)
         echo "🔧 更新現有服務到 Telegram Bot..."
-        DEPLOY_OUTPUT=$($HOME/.zeabur/bin/zeabur service deploy \
-          --project="$PROJECT_NAME" \
-          --service="$SERVICE_NAME" \
-          --source=. \
-          --type=python 2>&1)
+        echo "📋 使用 zeabur deploy 命令部署..."
+        
+        DEPLOY_OUTPUT=$($HOME/.zeabur/bin/zeabur deploy \
+          --name="$SERVICE_NAME" \
+          --create=false 2>&1)
         
         echo "$DEPLOY_OUTPUT"
+        
+        # 檢查部署是否成功
+        if [ $? -eq 0 ]; then
+          echo "✅ 部署命令執行成功"
+        else
+          echo "❌ 部署命令執行失敗"
+          exit 1
+        fi
         
         # 使用已知的 URL
         APP_URL="https://namecard-app.zeabur.app"
@@ -234,20 +249,31 @@ jobs:
           "PYTHONUNBUFFERED=1"
         )
         
+        failed_vars=0
         for env_var in "${env_vars[@]}"; do
           key=$(echo "$env_var" | cut -d'=' -f1)
           value=$(echo "$env_var" | cut -d'=' -f2-)
           
           if [ -n "$value" ] && [ "$value" != "" ]; then
             echo "🔑 設置環境變數: $key"
-            $HOME/.zeabur/bin/zeabur env set \
-              --project="$PROJECT_NAME" \
-              --service="$SERVICE_NAME" \
-              "$key" "$value" || echo "⚠️ 設置 $key 失敗"
+            if $HOME/.zeabur/bin/zeabur variable create \
+              --name="$SERVICE_NAME" \
+              -k "$key=$value" \
+              -y; then
+              echo "✅ $key 設置成功"
+            else
+              echo "❌ 設置 $key 失敗"
+              failed_vars=$((failed_vars + 1))
+            fi
           else
             echo "⚠️ 跳過空值環境變數: $key"
           fi
         done
+        
+        if [ $failed_vars -gt 0 ]; then
+          echo "❌ 有 $failed_vars 個環境變數設置失敗"
+          echo "⚠️ 繼續部署，但可能會有問題"
+        fi
         
         echo "✅ 環境變數設置完成"
         
