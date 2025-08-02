@@ -11,5 +11,6 @@
     "PYTHON_VERSION": "3.9",
     "FLASK_ENV": "production",
     "PYTHONUNBUFFERED": "1"
-  }
+  },
+  "region": "hkg"
 }
