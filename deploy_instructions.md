@@ -9,7 +9,7 @@
 - 電話格式化：國際化處理
 - 完整的 LINE Bot 功能
 
-## 🌐 選項 1：Railway 部署（推薦）
+## 🌐 選項 1：Zeabur 部署（推薦）
 
 ### 步驟：
 1. **上傳到 GitHub**：
@@ -22,11 +22,11 @@
    git push -u origin main
    ```
 
-2. **Railway 部署**：
-   - 前往 https://railway.app
+2. **Zeabur 部署**：
+   - 前往 https://zeabur.com
    - 登入並連接 GitHub
    - 選擇你的 repository
-   - Railway 會自動偵測並部署
+   - Zeabur 會自動偵測並部署
 
 3. **設定環境變數**：
    ```
@@ -37,8 +37,8 @@
    NOTION_DATABASE_ID=2377cb1a9ac98006bfc1c92f522b8bd4
    ```
 
-4. **獲得 URL**：Railway 會給你一個穩定的 URL，如：
-   `https://your-app-name.railway.app`
+4. **獲得 URL**：Zeabur 會給你一個穩定的 URL，如：
+   `https://your-app-name.zeabur.app`
 
 ## 🌐 選項 2：Heroku 部署
 

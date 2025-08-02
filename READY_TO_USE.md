@@ -24,7 +24,7 @@
 ## 🚀 下一步選擇：
 
 ### **選項 A：立即部署到雲端（推薦）**
-- 使用 Railway/Heroku 獲得穩定 URL
+- 使用 Zeabur/Heroku 獲得穩定 URL
 - 5-10 分鐘內可完成部署
 - 永久解決 webhook 問題
 

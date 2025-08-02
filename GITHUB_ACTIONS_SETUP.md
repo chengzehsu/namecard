@@ -58,9 +58,9 @@ Value: [您的 OpenAI API Key - 可選]
 
 #### 🚀 部署配置 (依需求)
 ```
-Secret Name: RAILWAY_TOKEN
-Description: Railway deployment token
-Value: [您的 Railway Token - 如果使用 Railway]
+Secret Name: ZEABUR_TOKEN
+Description: Zeabur deployment token
+Value: [您的 Zeabur Token - 如果使用 Zeabur]
 
 Secret Name: HEROKU_API_KEY
 Description: Heroku API Key for deployment  
@@ -77,7 +77,7 @@ Value: [您的 Heroku API Key - 如果使用 Heroku]
 - ✅ `NOTION_DATABASE_ID`
 - ⚡ `ANTHROPIC_API_KEY` (推薦)
 - ⚡ `OPENAI_API_KEY` (可選)
-- 🚀 部署相關 tokens (依需求)
+- 🚀 `ZEABUR_TOKEN` / `HEROKU_API_KEY` (依需求)
 
 ## 🎯 第二步：啟用 GitHub Actions
 

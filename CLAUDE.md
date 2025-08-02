@@ -56,7 +56,6 @@ namecard/
 ├── requirements-telegram.txt       # Telegram Bot 專用依賴 🆕
 ├── Procfile                        # Heroku 部署配置 (LINE Bot)
 ├── Procfile.telegram               # Telegram Bot 部署配置 🆕
-├── railway_app.py                  # Railway 部署入口
 ├── README-TELEGRAM.md              # Telegram Bot 詳細說明 🆕
 └── CLAUDE.md                       # 本文件 (開發指導原則)
 ```
@@ -392,8 +391,7 @@ NOTION_DATABASE_ID             # Notion 資料庫 ID
 # 部署平台 Tokens (依需求)
 # ==========================================
 ZEABUR_TOKEN                   # Zeabur 部署權杖 (推薦)
-RAILWAY_TOKEN                  # Railway 部署權杖 (備用)
-HEROKU_API_KEY                 # Heroku 部署 API 金鑰 (傳統)
+HEROKU_API_KEY                 # Heroku 部署 API 金鑰 (可選)
 
 # ==========================================
 # Claude Code AI 自動化 (可選)
@@ -568,7 +566,6 @@ NOTION_DATABASE_ID             # Notion 資料庫 ID
 
 # 部署相關
 ZEABUR_TOKEN                   # Zeabur 部署權杖 (推薦)
-RAILWAY_TOKEN                  # Railway 部署權杖 (備用)
 HEROKU_API_KEY                 # Heroku 部署 API (傳統)
 
 # 可選 AI 功能
@@ -1059,13 +1056,7 @@ git push origin main  # 觸發新的部署
 
 ### 🔧 其他部署選項
 
-#### Railway (備用選項)
-```bash
-# 如果有 Railway token
-RAILWAY_TOKEN=your_railway_token_here
-```
-
-#### Heroku (傳統選項)
+#### Heroku (可選)
 ```bash
 # 如果使用 Heroku
 HEROKU_API_KEY=your_heroku_api_key_here
@@ -1317,7 +1308,7 @@ git push origin main                # 觸發 CI/CD (會自動格式化)
 - **協作方式**: 透過 Claude Code 進行互動式開發
 - **版本控制**: Git + GitHub，整合 GitHub Actions 自動化
 - **AI 輔助開發**: Claude Code GitHub Actions 智能 PR 創建
-- **部署平台**: Railway/Heroku 等雲端平台
+- **部署平台**: Zeabur/Heroku 等雲端平台
 - **CI/CD**: GitHub Actions 自動化測試、建構、部署
 
 ### 🛠️ 開發工作流程

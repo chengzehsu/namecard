@@ -1,12 +1,12 @@
 {
-  "name": "namecard-line-bot",
+  "name": "namecard-telegram-bot",
   "type": "python",
   "framework": "flask",
-  "buildCommand": "pip install -r requirements.txt",
-  "startCommand": "python app.py",
+  "buildCommand": "pip install -r requirements-telegram.txt",
+  "startCommand": "python telegram_app.py",
   "environment": {
     "PYTHON_VERSION": "3.9",
-    "PORT": "5002",
+    "PORT": "5003",
     "FLASK_ENV": "production",
     "FLASK_DEBUG": "false",
     "PYTHONUNBUFFERED": "1"
@@ -19,15 +19,15 @@
   },
   "healthCheck": {
     "path": "/health",
-    "port": 5002,
+    "port": 5003,
     "timeout": 30,
     "interval": 60
   },
   "volumes": [],
   "services": {
-    "namecard-app": {
+    "namecard-telegram-app": {
       "type": "web",
-      "port": 5002,
+      "port": 5003,
       "domain": {
         "generate": true
       }
@@ -38,21 +38,21 @@
   "dockerFile": null,
   "buildArgs": {},
   "secrets": [
-    "LINE_CHANNEL_ACCESS_TOKEN",
-    "LINE_CHANNEL_SECRET",
+    "TELEGRAM_BOT_TOKEN",
     "GOOGLE_API_KEY",
+    "GOOGLE_API_KEY_FALLBACK",
     "NOTION_API_KEY",
     "NOTION_DATABASE_ID"
   ],
   "envVars": {
-    "PORT": "5002",
+    "PORT": "5003",
     "FLASK_ENV": "production",
     "FLASK_DEBUG": "false",
     "PYTHON_VERSION": "3.9",
     "PYTHONUNBUFFERED": "1"
   },
-  "description": "名片管理 LINE Bot - 使用 Google Gemini AI 識別名片並存入 Notion",
-  "tags": ["linebot", "ai", "notion", "gemini", "namecard"],
+  "description": "名片管理 Telegram Bot - 使用 Google Gemini AI 識別名片並存入 Notion",
+  "tags": ["telegrambot", "ai", "notion", "gemini", "namecard"],
   "repository": {
     "type": "github",
     "autoDeploy": true,

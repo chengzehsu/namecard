@@ -576,15 +576,15 @@ if __name__ == '__main__':
 
 ### 8.2 部署配置分離
 ```python
-# deployment/platforms/railway/railway_app.py
-from main import main
-
-app = main()  # Railway 專用入口
-
 # deployment/platforms/zeabur/zeabur_app.py  
 from main import main
 
 app = main()  # Zeabur 專用入口
+
+# deployment/platforms/heroku/heroku_app.py
+from main import main
+
+app = main()  # Heroku 專用入口
 ```
 
 ## 📈 實施時程和里程碑

@@ -243,26 +243,6 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
         -d "url=https://your-app.zeabur.app/telegram-webhook"
    ```
 
-#### 使用 Railway
-
-```bash
-# 1. 安裝 Railway CLI
-npm install -g @railway/cli
-
-# 2. 登入 Railway
-railway login
-
-# 3. 初始化專案
-railway init
-
-# 4. 設置環境變數
-railway variables set TELEGRAM_BOT_TOKEN=your_token_here
-railway variables set GOOGLE_API_KEY=your_api_key_here
-# ... 設置其他變數
-
-# 5. 部署
-railway up
-```
 
 #### 使用 Heroku
 

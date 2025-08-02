@@ -43,7 +43,6 @@
 
 ### ✅ 已準備的配置
 - `zeabur.json` - Zeabur 平台配置
-- `railway_app.py` - Railway 平台入口
 - `Procfile` - Heroku 部署配置
 - `requirements.txt` - Python 依賴
 - `.github/workflows/deploy-zeabur.yml` - 自動部署工作流程
@@ -63,11 +62,11 @@
 4. 點擊部署
 ```
 
-### 2. Railway 部署
+### 2. Heroku 部署
 ```bash
-1. 前往 https://railway.app/
+1. 前往 https://heroku.com/
 2. 連接 GitHub 倉庫: chengzehsu/namecard
-3. 使用 railway_app.py 作為入口點
+3. 使用 app.py 作為入口點
 4. 設置相同的環境變數
 5. 部署到生產環境
 ```
@@ -108,7 +107,7 @@ python app.py
 
 ### 立即行動 (優先級: 高)
 1. **設置 GitHub Secrets**: 在 Repository Settings 中添加 `ZEABUR_TOKEN`
-2. **手動部署**: 選擇 Zeabur 或 Railway 進行手動部署
+2. **手動部署**: 選擇 Zeabur 或 Heroku 進行手動部署
 3. **更新 LINE Webhook**: 使用新的部署 URL 更新 LINE Bot 設定
 
 ### 後續改進 (優先級: 中)
