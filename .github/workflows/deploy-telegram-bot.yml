@@ -129,91 +129,20 @@ jobs:
         echo "配置 Zeabur 認證..."
         echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
         
-    - name: 📝 創建 Telegram Bot 部署配置
-      run: |
-        echo "創建 Telegram Bot 專用部署配置..."
-        cat > zeabur-telegram.json << EOF
-        {
-          "name": "namecard-telegram-bot",
-          "type": "python",
-          "source": {
-            "type": "git",
-            "url": "${{ github.server_url }}/${{ github.repository }}",
-            "branch": "${{ github.ref_name }}"
-          },
-          "build": {
-            "commands": [
-              "pip install --upgrade pip",
-              "pip install -r requirements-telegram.txt"
-            ]
-          },
-          "start": {
-            "command": "python main.py"
-          },
-          "environment": {
-            "PYTHON_VERSION": "3.9",
-            "PORT": "5003",
-            "FLASK_ENV": "production"
-          },
-          "regions": ["hkg"],
-          "scaling": {
-            "minInstances": 1,
-            "maxInstances": 2
-          }
-        }
-        EOF
-        
-    - name: 🎯 創建或更新 Zeabur 專案
-      run: |
-        echo "管理 Zeabur 專案..."
-        
-        # 嘗試創建新專案，如果已存在則更新
-        if zeabur project create namecard-telegram-bot 2>/dev/null; then
-          echo "✅ 創建新專案: namecard-telegram-bot"
-        else
-          echo "📝 專案已存在，將進行更新"
-        fi
-        
-        # 設置專案為當前專案
-        zeabur project use namecard-telegram-bot
-        
-    - name: 🔧 創建或更新服務
-      run: |
-        echo "管理 Zeabur 服務..."
-        
-        # 創建服務，如果已存在則更新
-        if zeabur service create telegram-bot --type python 2>/dev/null; then
-          echo "✅ 創建新服務: telegram-bot"
-        else
-          echo "📝 服務已存在，將進行更新"
-        fi
-        
-    - name: ⚙️ 設置環境變數
-      run: |
-        echo "設置 Telegram Bot 環境變數..."
-        
-        # 設置所有必要的環境變數
-        zeabur env set TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-        zeabur env set GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}"
-        zeabur env set GOOGLE_API_KEY_FALLBACK="${{ secrets.GOOGLE_API_KEY_FALLBACK }}"
-        zeabur env set NOTION_API_KEY="${{ secrets.NOTION_API_KEY }}"
-        zeabur env set NOTION_DATABASE_ID="${{ secrets.NOTION_DATABASE_ID }}"
-        zeabur env set GEMINI_MODEL="gemini-2.5-pro"
-        zeabur env set PORT="5003"
-        zeabur env set FLASK_DEBUG="false"
-        zeabur env set FLASK_ENV="production"
-        
-        echo "✅ 環境變數設置完成"
-        
-    - name: 🚀 部署服務
+    - name: 🚀 部署到 Zeabur
       run: |
         echo "部署 Telegram Bot 到 Zeabur..."
         
-        # 執行部署
-        zeabur deploy --service telegram-bot \
-          --source . \
-          --build-command "pip install -r requirements-telegram.txt" \
-          --start-command "python main.py"
+        # 設置環境變數到當前 shell（用於部署）
+        export TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        export GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}"
+        export GOOGLE_API_KEY_FALLBACK="${{ secrets.GOOGLE_API_KEY_FALLBACK }}"
+        export NOTION_API_KEY="${{ secrets.NOTION_API_KEY }}"
+        export NOTION_DATABASE_ID="${{ secrets.NOTION_DATABASE_ID }}"
+        export GEMINI_MODEL="gemini-2.5-pro"
+        
+        # 使用 Zeabur CLI 部署（會讀取 zeabur.json）
+        zeabur deploy
           
         echo "✅ 部署完成"
         
@@ -226,8 +155,8 @@ jobs:
       run: |
         echo "執行 Telegram Bot 健康檢查..."
         
-        # 獲取部署 URL
-        DEPLOY_URL=$(zeabur service info telegram-bot --format json | jq -r '.url // empty')
+        # 獲取部署 URL（嘗試多種方法）
+        DEPLOY_URL=$(zeabur service list | grep -o 'https://[^[:space:]]*' | head -1)
         
         if [[ -z "$DEPLOY_URL" ]]; then
           echo "⚠️ 無法獲取部署 URL，跳過健康檢查"
@@ -291,8 +220,8 @@ jobs:
         echo "👤 觸發者: ${{ github.actor }}"
         echo "🏷️ 環境: ${{ inputs.environment || 'production' }}"
         
-        # 獲取部署 URL
-        DEPLOY_URL=$(zeabur service info telegram-bot --format json | jq -r '.url // empty' 2>/dev/null || echo "無法獲取")
+        # 獲取部署 URL（嘗試多種方法）
+        DEPLOY_URL=$(zeabur service list | grep -o 'https://[^[:space:]]*' | head -1 || echo "無法獲取")
         echo "🌐 Telegram Bot URL: $DEPLOY_URL"
         
         echo ""
