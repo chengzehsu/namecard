@@ -12,5 +12,6 @@
     "FLASK_ENV": "production",
     "PYTHONUNBUFFERED": "1"
   },
-  "region": "hkg"
+  "region": "hkg",
+  "restart": "always"
 }
