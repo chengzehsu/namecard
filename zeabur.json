@@ -1,5 +1,5 @@
 {
-  "name": "namecard-telegram-bot",
+  "name": "namecard-app",
   "build": {
     "command": "pip install -r requirements-telegram.txt"
   },
@@ -10,7 +10,9 @@
     "PORT": "5003",
     "PYTHON_VERSION": "3.9",
     "FLASK_ENV": "production",
-    "PYTHONUNBUFFERED": "1"
+    "PYTHONUNBUFFERED": "1",
+    "SERVICE_TYPE": "telegram-bot",
+    "BUILD_ID": "20250802-1420"
   },
   "region": "hkg",
   "restart": "always"

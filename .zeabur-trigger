@@ -1,7 +1,11 @@
 # Zeabur deployment trigger file
 # This file changes to force a rebuild of the service
-# Last updated: 2025-08-02 14:16:00 CST
+# Last updated: 2025-08-02 14:20:30 CST
 # Service: Telegram Bot (main.py)
-# Build: 20250802-1416
+# Build: 20250802-1420
+# Target: namecard-app.zeabur.app
 TELEGRAM_BOT_DEPLOYMENT=true
 FORCE_REBUILD=true
+SERVICE_NAME=namecard-app
+ENTRY_POINT=main.py
+TIMESTAMP=20250802-142030
