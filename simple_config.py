@@ -11,6 +11,9 @@ class Config:
     LINE_CHANNEL_ACCESS_TOKEN: str = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     LINE_CHANNEL_SECRET: str = os.getenv("LINE_CHANNEL_SECRET", "")
     
+    # Telegram Bot 配置
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    
     # Google AI 配置
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
     GOOGLE_API_KEY_FALLBACK: str = os.getenv("GOOGLE_API_KEY_FALLBACK", "")
@@ -52,6 +55,7 @@ class Config:
         print("📋 目前配置:")
         print(f"  LINE_CHANNEL_ACCESS_TOKEN: {'[已設置]' if cls.LINE_CHANNEL_ACCESS_TOKEN else '[未設置]'}")
         print(f"  LINE_CHANNEL_SECRET: {'[已設置]' if cls.LINE_CHANNEL_SECRET else '[未設置]'}")
+        print(f"  TELEGRAM_BOT_TOKEN: {'[已設置]' if cls.TELEGRAM_BOT_TOKEN else '[未設置]'}")
         print(f"  GOOGLE_API_KEY: {'[已設置]' if cls.GOOGLE_API_KEY else '[未設置]'}")
         print(f"  GOOGLE_API_KEY_FALLBACK: {'[已設置]' if cls.GOOGLE_API_KEY_FALLBACK else '[未設置]'}")
         print(f"  GEMINI_MODEL: {cls.GEMINI_MODEL}")
