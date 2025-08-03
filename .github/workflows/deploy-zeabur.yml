@@ -51,7 +51,7 @@ jobs:
     - name: 安裝依賴
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements-telegram.txt
+        pip install -r deployment/environments/production/requirements-telegram.txt
         
     - name: 快速語法檢查
       run: |
@@ -59,13 +59,13 @@ jobs:
         python -m py_compile main.py
         echo "✅ main.py 語法檢查通過"
         
-        python -m py_compile telegram_app.py
-        echo "✅ telegram_app.py 語法檢查通過"
+        python -m py_compile src/namecard/api/telegram_bot/telegram_main.py
+        echo "✅ telegram_main.py 語法檢查通過"
         
         # 檢查主要模組是否可以編譯
-        python -m py_compile config.py
-        python -m py_compile name_card_processor.py
-        python -m py_compile notion_manager.py
+        python -m py_compile config/base.py
+        python -m py_compile src/namecard/infrastructure/ai/card_processor.py
+        python -m py_compile src/namecard/infrastructure/storage/notion_client.py
         echo "✅ 核心模組語法檢查通過"
         
     - name: 檢查必要文件
@@ -73,7 +73,7 @@ jobs:
         echo "📋 檢查部署必要文件..."
         
         # 檢查必要文件
-        files=("main.py" "telegram_app.py" "requirements-telegram.txt" "config.py")
+        files=("main.py" "src/namecard/api/telegram_bot/telegram_main.py" "deployment/environments/production/requirements-telegram.txt" "config/base.py")
         for file in "${files[@]}"; do
           if [ -f "$file" ]; then
             echo "✅ $file 存在"
@@ -85,7 +85,7 @@ jobs:
         
         # 檢查 requirements-telegram.txt 內容
         echo "📦 檢查 Python 依賴:"
-        cat requirements-telegram.txt
+        cat deployment/environments/production/requirements-telegram.txt
         
         echo "✅ 部署檢查完成"
 
@@ -153,7 +153,7 @@ jobs:
         {
           "name": "namecard-telegram-bot",
           "type": "python",
-          "buildCommand": "pip install -r requirements-telegram.txt",
+          "buildCommand": "pip install -r deployment/environments/production/requirements-telegram.txt",
           "startCommand": "python main.py",
           "environment": {
             "PYTHON_VERSION": "3.9",
