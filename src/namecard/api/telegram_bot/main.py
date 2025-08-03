@@ -550,20 +550,47 @@ def telegram_webhook():
 
                 # 初始化應用並運行異步處理
                 async def process_update_with_init():
-                    await application.initialize()
-                    await application.process_update(update)
-                    await application.shutdown()
+                    try:
+                        await application.initialize()
+                        await application.process_update(update)
+                        await application.shutdown()
+                        log_message("✅ 異步處理完成")
+                    except Exception as inner_e:
+                        log_message(f"❌ 處理更新時發生錯誤: {inner_e}", "ERROR")
+                        import traceback
+                        traceback.print_exc()
+                        
+                        # 嘗試發送錯誤訊息給用戶
+                        try:
+                            if hasattr(update, 'effective_chat') and update.effective_chat:
+                                chat_id = update.effective_chat.id
+                                error_msg = "❌ 處理過程中發生錯誤，請稍後重試或聯繫管理員。"
+                                
+                                # 使用 Bot API 直接發送錯誤訊息
+                                import requests
+                                requests.post(
+                                    f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage",
+                                    json={"chat_id": chat_id, "text": error_msg},
+                                    timeout=5
+                                )
+                                log_message(f"📤 已發送錯誤訊息給用戶 {chat_id}")
+                        except Exception as send_error:
+                            log_message(f"❌ 無法發送錯誤訊息: {send_error}", "ERROR")
 
                 loop.run_until_complete(process_update_with_init())
                 loop.close()
             except Exception as e:
                 log_message(f"❌ 異步處理錯誤: {e}", "ERROR")
+                import traceback
+                traceback.print_exc()
 
         # 在後台線程中處理更新
         thread = threading.Thread(target=run_async_update, args=(update,))
-        thread.daemon = True
+        thread.daemon = False  # 改為非 daemon 線程，確保處理完成
         thread.start()
-
+        
+        # 立即返回給 Telegram，避免 webhook 超時
+        # 實際處理在後台進行，錯誤會直接發送給用戶
         return "OK", 200
 
     except Exception as e:
