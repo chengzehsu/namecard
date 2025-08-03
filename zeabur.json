@@ -1,7 +1,7 @@
 {
   "name": "telegram-bot",
   "build": {
-    "command": "pip install -r requirements-telegram.txt"
+    "command": "pip install -r deployment/environments/production/requirements-telegram.txt"
   },
   "start": {
     "command": "python main.py"

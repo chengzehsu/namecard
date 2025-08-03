@@ -4,11 +4,8 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'main.py'
-      - 'telegram_main.py'
-      - 'telegram_app.py'
-      - 'telegram_bot_handler.py'
-      - 'requirements-telegram.txt'
+      - 'src/namecard/api/telegram_bot/**'
+      - 'deployment/environments/production/requirements-telegram.txt'
       - '.github/workflows/deploy-telegram-bot.yml'
   workflow_dispatch:
     inputs:
@@ -44,15 +41,14 @@ jobs:
     - name: 📦 安裝依賴
       run: |
         pip install --upgrade pip
-        pip install -r requirements-telegram.txt
+        pip install -r deployment/environments/production/requirements-telegram.txt
         
     - name: 🔍 語法檢查
       run: |
         echo "檢查 Telegram Bot 語法..."
-        python -m py_compile main.py
-        python -m py_compile telegram_main.py
-        python -m py_compile telegram_app.py
-        python -m py_compile telegram_bot_handler.py
+        python -m py_compile src/namecard/api/telegram_bot/app.py
+        python -m py_compile src/namecard/api/telegram_bot/main.py
+        python -m py_compile src/namecard/api/telegram_bot/telegram_main.py
         echo "✅ 語法檢查通過"
         
     - name: 🧪 核心模組驗證
@@ -61,12 +57,11 @@ jobs:
         python -c "
         import sys
         sys.path.append('.')
+        sys.path.append('src')
         try:
-            # 測試獨立入口
-            import telegram_main
             # 測試核心模組
             from config import Config
-            from telegram_bot_handler import TelegramBotHandler
+            from src.namecard.infrastructure.messaging.telegram_client import TelegramBotHandler
             print('✅ 核心模組載入成功')
         except ImportError as e:
             if 'linebot' in str(e).lower():
@@ -83,18 +78,18 @@ jobs:
       run: |
         echo "檢查必要文件..."
         required_files=(
-          "main.py"
-          "telegram_main.py"
-          "telegram_app.py"
-          "telegram_bot_handler.py" 
-          "requirements-telegram.txt"
-          "name_card_processor.py"
-          "notion_manager.py"
-          "batch_manager.py"
-          "multi_card_processor.py"
-          "user_interaction_handler.py"
-          "address_normalizer.py"
-          "config.py"
+          "src/namecard/api/telegram_bot/app.py"
+          "src/namecard/api/telegram_bot/main.py"
+          "src/namecard/api/telegram_bot/telegram_main.py"
+          "src/namecard/infrastructure/messaging/telegram_client.py" 
+          "deployment/environments/production/requirements-telegram.txt"
+          "src/namecard/infrastructure/ai/card_processor.py"
+          "src/namecard/infrastructure/storage/notion_client.py"
+          "src/namecard/core/services/batch_service.py"
+          "src/namecard/core/services/multi_card_service.py"
+          "src/namecard/core/services/interaction_service.py"
+          "src/namecard/core/services/address_service.py"
+          "config/base.py"
         )
         
         for file in "${required_files[@]}"; do

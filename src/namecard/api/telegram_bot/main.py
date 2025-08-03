@@ -17,15 +17,18 @@ from telegram.ext import (
     filters,
 )
 
+# 添加根目錄到 Python 路徑
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
+sys.path.insert(0, root_dir)
+
 # 導入現有的處理器
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from batch_manager import BatchManager
-from config import Config
-from multi_card_processor import MultiCardProcessor
-from name_card_processor import NameCardProcessor
-from notion_manager import NotionManager
-from telegram_bot_handler import TelegramBotHandler
-from user_interaction_handler import UserInteractionHandler
+from config.base import Config
+from src.namecard.core.services.batch_service import BatchManager
+from src.namecard.core.services.multi_card_service import MultiCardProcessor
+from src.namecard.infrastructure.ai.card_processor import NameCardProcessor
+from src.namecard.infrastructure.storage.notion_client import NotionManager
+from src.namecard.infrastructure.messaging.telegram_client import TelegramBotHandler
+from src.namecard.core.services.interaction_service import UserInteractionHandler
 
 # Flask 應用 (用於 webhook)
 flask_app = Flask(__name__)

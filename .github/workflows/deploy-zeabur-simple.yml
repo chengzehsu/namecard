@@ -4,8 +4,8 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'telegram_app.py'
-      - 'requirements-telegram.txt'
+      - 'src/namecard/api/telegram_bot/**'
+      - 'deployment/environments/production/requirements-telegram.txt'
       - 'zeabur.json'
       - '.github/workflows/deploy-zeabur-simple.yml'
   workflow_dispatch:
@@ -33,14 +33,14 @@ jobs:
     - name: 📦 安裝依賴
       run: |
         pip install --upgrade pip
-        pip install -r requirements-telegram.txt
+        pip install -r deployment/environments/production/requirements-telegram.txt
         
     - name: 🔍 基本測試
       run: |
         echo "執行基本語法檢查..."
-        python -m py_compile main.py
-        python -m py_compile telegram_app.py
-        python -m py_compile config.py
+        python -m py_compile src/namecard/api/telegram_bot/app.py
+        python -m py_compile src/namecard/api/telegram_bot/main.py
+        python -m py_compile config/base.py
         echo "✅ 語法檢查通過"
         
     - name: 📝 創建部署配置
@@ -52,10 +52,10 @@ jobs:
         {
           "name": "namecard-telegram-bot",
           "build": {
-            "command": "pip install -r requirements-telegram.txt"
+            "command": "pip install -r deployment/environments/production/requirements-telegram.txt"
           },
           "start": {
-            "command": "python main.py"
+            "command": "python src/namecard/api/telegram_bot/main.py"
           },
           "environment": {
             "PORT": "5003",
