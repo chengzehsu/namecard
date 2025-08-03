@@ -12,7 +12,7 @@ from linebot.models import ImageMessage, MessageEvent, TextMessage, TextSendMess
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
 sys.path.insert(0, root_dir)
 
-from config.base import Config
+from simple_config import Config
 from src.namecard.core.services.batch_service import BatchManager
 from src.namecard.infrastructure.messaging.line_client import LineBotApiHandler
 from src.namecard.core.services.multi_card_service import MultiCardProcessor
@@ -48,9 +48,12 @@ def log_message(message, level="INFO"):
 
 # 驗證配置（使用新的日誌函數）
 try:
-    Config.validate_config()
+    if not Config.validate():
+        log_message("❌ 配置驗證失敗", "ERROR")
+        log_message("💡 請檢查環境變數設置", "INFO")
+        exit(1)
     log_message("✅ 配置驗證成功")
-except ValueError as e:
+except Exception as e:
     log_message(f"❌ 配置錯誤: {e}", "ERROR")
     exit(1)
 

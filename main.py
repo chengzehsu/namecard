@@ -17,7 +17,7 @@ def main():
     """主函數"""
     try:
         # 導入並運行 Telegram Bot
-        from src.namecard.api.telegram_bot.main import app
+        from src.namecard.api.telegram_bot.main import flask_app as app
         
         # 獲取環境變數
         port = int(os.environ.get('PORT', 5003))
