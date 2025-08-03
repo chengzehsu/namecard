@@ -12,7 +12,7 @@ from enum import Enum
 import json
 import aiofiles
 
-from config import Config
+from simple_config import Config
 
 
 class ApiKeyStatus(Enum):

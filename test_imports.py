@@ -1,118 +1,115 @@
 #!/usr/bin/env python3
 """
-測試 import 路徑是否正確
+測試所有重要模組的導入是否正常
 """
-
 import sys
 import os
 
-# 添加專案根目錄到 Python path
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, project_root)
+# 添加根目錄到 Python 路徑
+root_dir = os.path.abspath(os.path.dirname(__file__))
+src_dir = os.path.join(root_dir, 'src')
+sys.path.insert(0, root_dir)
+sys.path.insert(0, src_dir)
 
-def test_imports():
-    """測試各種 import"""
-    print("🔍 測試 import 路徑...")
-    
-    # 測試基本模組
+def test_config_import():
+    """测试配置導入"""
     try:
-        print("  ✅ 測試基本 Python 模組...")
-        import asyncio
-        import time
-        print("    ✅ asyncio, time - OK")
-    except ImportError as e:
-        print(f"    ❌ 基本模組失敗: {e}")
-        return False
-    
-    # 測試配置
-    try:
-        print("  ✅ 測試配置模組...")
         from simple_config import Config
-        print("    ✅ Config - OK")
-    except ImportError as e:
-        print(f"    ❌ Config 失敗: {e}")
-        # 嘗試複雜配置
-        try:
-            from config.settings import get_config
-            config = get_config()
-            print("    ✅ Complex Config - OK")
-        except ImportError as e2:
-            print(f"    ❌ 複雜配置也失敗: {e2}")
-            return False
-    
-    # 測試地址服務
-    try:
-        print("  ✅ 測試地址服務...")
-        from src.namecard.core.services.address_service import AddressNormalizer
-        normalizer = AddressNormalizer()
-        print("    ✅ AddressNormalizer - OK")
-    except ImportError as e:
-        print(f"    ❌ AddressNormalizer 失敗: {e}")
-        return False
-    
-    # 測試 AI 相關
-    try:
-        print("  ✅ 測試 AI 相關模組...")
-        import google.generativeai as genai
-        from PIL import Image
-        print("    ✅ Gemini AI, PIL - OK")
-    except ImportError as e:
-        print(f"    ❌ AI 模組失敗: {e}")
-        return False
-    
-    # 測試異步框架
-    try:
-        print("  ✅ 測試異步框架...")
-        from quart import Quart
-        import hypercorn
-        print("    ✅ Quart, Hypercorn - OK")
-    except ImportError as e:
-        print(f"    ❌ 異步框架失敗: {e}")
-        return False
-    
-    print("🎉 所有 import 測試通過！")
-    return True
-
-def test_async_components():
-    """測試異步組件能否正確載入"""
-    print("\n🧪 測試異步組件載入...")
-    
-    try:
-        # 測試異步卡片處理器
-        print("  ✅ 載入 AsyncCardProcessor...")
-        sys.path.append(os.path.join(project_root, 'src'))
-        from src.namecard.infrastructure.ai.async_card_processor import AsyncCardProcessor, ProcessingPriority
-        print("    ✅ AsyncCardProcessor - OK")
+        print("✅ simple_config.Config 導入成功")
         
-        # 測試批次服務
-        print("  ✅ 載入 AsyncBatchService...")
-        from src.namecard.core.services.async_batch_service import AsyncBatchService
-        print("    ✅ AsyncBatchService - OK")
+        # 測試配置方法
+        config_valid = Config.validate()
+        print(f"✅ Config.validate() 運行成功: {config_valid}")
         
-        # 測試統一服務
-        print("  ✅ 載入 OptimizedAIService...")
-        from src.namecard.infrastructure.ai.optimized_ai_service import OptimizedAIService
-        print("    ✅ OptimizedAIService - OK")
-        
-        print("🎉 所有異步組件載入成功！")
         return True
-        
     except Exception as e:
-        print(f"❌ 異步組件載入失敗: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Config 導入失敗: {e}")
         return False
+
+def test_main_app_imports():
+    """測試主應用導入"""
+    try:
+        from src.namecard.api.telegram_bot.main import flask_app
+        print("✅ Telegram Bot Flask app 導入成功")
+        
+        from src.namecard.api.line_bot.main import app
+        print("✅ LINE Bot Flask app 導入成功")
+        
+        return True
+    except Exception as e:
+        print(f"❌ 主應用導入失敗: {e}")
+        return False
+
+def test_core_services():
+    """測試核心服務導入"""
+    try:
+        from src.namecard.core.services.batch_service import BatchManager
+        print("✅ BatchManager 導入成功")
+        
+        from src.namecard.core.services.multi_card_service import MultiCardProcessor
+        print("✅ MultiCardProcessor 導入成功")
+        
+        from src.namecard.infrastructure.ai.card_processor import NameCardProcessor
+        print("✅ NameCardProcessor 導入成功")
+        
+        from src.namecard.infrastructure.storage.notion_client import NotionManager
+        print("✅ NotionManager 導入成功")
+        
+        return True
+    except Exception as e:
+        print(f"❌ 核心服務導入失敗: {e}")
+        return False
+
+def test_infrastructure():
+    """測試基礎設施導入"""
+    try:
+        from src.namecard.infrastructure.messaging.telegram_client import TelegramBotHandler
+        print("✅ TelegramBotHandler 導入成功")
+        
+        from src.namecard.core.services.interaction_service import UserInteractionHandler
+        print("✅ UserInteractionHandler 導入成功")
+        
+        return True
+    except Exception as e:
+        print(f"❌ 基礎設施導入失敗: {e}")
+        return False
+
+def main():
+    """主測試函數"""
+    print("🧪 開始測試所有模組導入...")
+    print(f"📂 工作目錄: {os.getcwd()}")
+    print(f"🐍 Python 路徑: {sys.path[:3]}...")
+    print()
+    
+    all_tests_passed = True
+    
+    # 運行所有測試
+    tests = [
+        ("配置模組", test_config_import),
+        ("主應用", test_main_app_imports),
+        ("核心服務", test_core_services),
+        ("基礎設施", test_infrastructure),
+    ]
+    
+    for test_name, test_func in tests:
+        print(f"🔍 測試 {test_name}...")
+        try:
+            if test_func():
+                print(f"✅ {test_name} 測試通過\n")
+            else:
+                print(f"❌ {test_name} 測試失敗\n")
+                all_tests_passed = False
+        except Exception as e:
+            print(f"❌ {test_name} 測試異常: {e}\n")
+            all_tests_passed = False
+    
+    print("=" * 50)
+    if all_tests_passed:
+        print("🎉 所有導入測試通過！可以安全部署。")
+        return 0
+    else:
+        print("❌ 部分導入測試失敗，請修復後再部署。")
+        return 1
 
 if __name__ == "__main__":
-    print("🚀 開始 import 路徑測試...")
-    
-    success = True
-    success &= test_imports()
-    success &= test_async_components()
-    
-    if success:
-        print("\n✅ 所有測試通過！系統準備就緒。")
-        sys.exit(0)
-    else:
-        print("\n❌ 部分測試失敗，需要修復。")
-        sys.exit(1)
+    exit(main())

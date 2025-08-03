@@ -19,7 +19,7 @@ from telegram.error import (
     TelegramError,
 )
 
-from config import Config
+from simple_config import Config
 
 
 class TelegramBotHandler:

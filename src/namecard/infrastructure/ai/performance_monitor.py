@@ -13,7 +13,7 @@ import json
 import statistics
 import aiofiles
 
-from config import Config
+from simple_config import Config
 
 
 @dataclass
