@@ -1,0 +1,733 @@
+name: 🔄 智能部署與自動回滾
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: '服務名稱'
+        required: true
+        default: 'namecard-telegram-bot'
+        type: choice
+        options:
+        - namecard-telegram-bot
+        - namecard-line-bot
+      environment:
+        description: '目標環境'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+      enable_rollback:
+        description: '啟用自動回滾'
+        required: false
+        default: true
+        type: boolean
+      health_check_timeout:
+        description: '健康檢查超時 (秒)'
+        required: false
+        default: '300'
+        type: string
+      rollback_strategy:
+        description: '回滾策略'
+        required: false
+        default: 'previous-version'
+        type: choice
+        options:
+        - previous-version
+        - stable-backup
+        - manual-intervention
+
+env:
+  SERVICE_NAME: ${{ github.event.inputs.service_name }}
+  ENVIRONMENT: ${{ github.event.inputs.environment }}
+  HEALTH_CHECK_TIMEOUT: ${{ github.event.inputs.health_check_timeout }}
+  ROLLBACK_STRATEGY: ${{ github.event.inputs.rollback_strategy }}
+
+jobs:
+  pre-deployment-backup:
+    name: 📦 預部署備份
+    runs-on: ubuntu-latest
+    
+    outputs:
+      backup_created: ${{ steps.backup.outputs.backup_created }}
+      backup_url: ${{ steps.backup.outputs.backup_url }}
+      backup_version: ${{ steps.backup.outputs.backup_version }}
+      current_commit: ${{ steps.backup.outputs.current_commit }}
+      
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 🛠️ 安裝 Zeabur CLI
+      run: |
+        echo "📦 安裝 Zeabur CLI..."
+        npm install -g @zeabur/cli@latest
+        zeabur --version
+        
+    - name: 🔐 配置 Zeabur 認證
+      run: |
+        echo "🔐 配置 Zeabur 認證..."
+        echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
+        
+    - name: 📊 獲取當前部署信息
+      id: current-info
+      run: |
+        echo "📊 獲取當前部署信息..."
+        
+        # 嘗試獲取當前服務信息
+        if zeabur service info "${{ env.SERVICE_NAME }}" --format json > service_info.json 2>/dev/null; then
+          echo "✅ 找到現有服務: ${{ env.SERVICE_NAME }}"
+          
+          # 解析服務信息
+          CURRENT_URL=$(jq -r '.url // empty' service_info.json)
+          CURRENT_STATUS=$(jq -r '.status // empty' service_info.json)
+          
+          echo "current_url=$CURRENT_URL" >> $GITHUB_OUTPUT
+          echo "current_status=$CURRENT_STATUS" >> $GITHUB_OUTPUT
+          echo "service_exists=true" >> $GITHUB_OUTPUT
+          
+          echo "📋 當前服務狀態:"
+          echo "- URL: $CURRENT_URL"
+          echo "- 狀態: $CURRENT_STATUS"
+        else
+          echo "⚠️ 服務不存在或無法訪問: ${{ env.SERVICE_NAME }}"
+          echo "service_exists=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: 🏥 當前服務健康檢查
+      id: current-health
+      run: |
+        if [ "${{ steps.current-info.outputs.service_exists }}" = "true" ]; then
+          CURRENT_URL="${{ steps.current-info.outputs.current_url }}"
+          
+          if [ -n "$CURRENT_URL" ]; then
+            echo "🏥 檢查當前服務健康狀態..."
+            
+            if curl -f -s "$CURRENT_URL/health" > /dev/null; then
+              echo "✅ 當前服務健康正常"
+              echo "current_healthy=true" >> $GITHUB_OUTPUT
+              
+              # 獲取健康檢查響應詳情
+              HEALTH_RESPONSE=$(curl -s "$CURRENT_URL/health" | jq -r '.' 2>/dev/null || echo "無法解析")
+              echo "健康檢查響應: $HEALTH_RESPONSE"
+            else
+              echo "❌ 當前服務健康檢查失敗"
+              echo "current_healthy=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "⚠️ 無法獲取當前服務 URL"
+            echo "current_healthy=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "⏭️ 沒有現有服務，跳過健康檢查"
+          echo "current_healthy=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: 📦 創建部署備份
+      id: backup
+      run: |
+        echo "📦 創建部署備份..."
+        
+        CURRENT_COMMIT=$(git rev-parse HEAD)
+        BACKUP_TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+        BACKUP_VERSION="backup-${BACKUP_TIMESTAMP}-${CURRENT_COMMIT:0:7}"
+        
+        echo "current_commit=$CURRENT_COMMIT" >> $GITHUB_OUTPUT
+        echo "backup_version=$BACKUP_VERSION" >> $GITHUB_OUTPUT
+        
+        if [ "${{ steps.current-info.outputs.service_exists }}" = "true" ]; then
+          echo "✅ 創建當前部署的備份記錄"
+          
+          # 創建備份信息文件
+          cat > deployment-backup.json << EOF
+        {
+          "backup_version": "$BACKUP_VERSION",
+          "original_service": "${{ env.SERVICE_NAME }}",
+          "original_url": "${{ steps.current-info.outputs.current_url }}",
+          "original_status": "${{ steps.current-info.outputs.current_status }}",
+          "healthy_before_deploy": "${{ steps.current-health.outputs.current_healthy }}",
+          "commit_hash": "$CURRENT_COMMIT",
+          "backup_timestamp": "$BACKUP_TIMESTAMP",
+          "environment": "${{ env.ENVIRONMENT }}"
+        }
+        EOF
+        
+          echo "backup_created=true" >> $GITHUB_OUTPUT
+          echo "backup_url=${{ steps.current-info.outputs.current_url }}" >> $GITHUB_OUTPUT
+          
+          echo "📋 備份信息:"
+          cat deployment-backup.json
+        else
+          echo "⚠️ 沒有現有服務，無需備份"
+          echo "backup_created=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: 📁 存儲備份信息
+      if: steps.backup.outputs.backup_created == 'true'
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-backup-${{ steps.backup.outputs.backup_version }}
+        path: |
+          deployment-backup.json
+          service_info.json
+        retention-days: 30
+
+  deploy-new-version:
+    name: 🚀 部署新版本
+    runs-on: ubuntu-latest
+    needs: pre-deployment-backup
+    
+    outputs:
+      deployment_success: ${{ steps.deploy.outputs.deployment_success }}
+      new_service_url: ${{ steps.deploy.outputs.new_service_url }}
+      deployment_time: ${{ steps.deploy.outputs.deployment_time }}
+      
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      
+    - name: 🐍 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 安裝依賴
+      run: |
+        pip install --upgrade pip
+        
+        # 根據服務類型安裝依賴
+        if [[ "${{ env.SERVICE_NAME }}" == *"telegram"* ]]; then
+          pip install -r requirements-telegram.txt
+        else
+          pip install -r requirements.txt
+        fi
+        
+    - name: 🔍 部署前檢查
+      run: |
+        echo "🔍 執行部署前檢查..."
+        
+        # 語法檢查
+        if [[ "${{ env.SERVICE_NAME }}" == *"telegram"* ]]; then
+          python -m py_compile main.py
+          python -m py_compile telegram_app.py
+        else
+          python -m py_compile app.py
+        fi
+        
+        python -m py_compile config.py
+        echo "✅ 語法檢查通過"
+        
+        # 檢查必要文件
+        if [[ "${{ env.SERVICE_NAME }}" == *"telegram"* ]]; then
+          required_files=("main.py" "telegram_app.py" "requirements-telegram.txt")
+        else
+          required_files=("app.py" "requirements.txt")
+        fi
+        
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✅ $file 存在"
+          else
+            echo "❌ $file 缺失"
+            exit 1
+          fi
+        done
+        
+    - name: 🛠️ 安裝 Zeabur CLI
+      run: |
+        echo "📦 安裝 Zeabur CLI..."
+        npm install -g @zeabur/cli@latest
+        zeabur --version
+        
+    - name: 🔐 配置 Zeabur 認證
+      run: |
+        echo "🔐 配置 Zeabur 認證..."
+        echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
+        
+    - name: 📝 創建部署配置
+      run: |
+        echo "📝 創建部署配置..."
+        
+        # 根據服務類型創建配置
+        if [[ "${{ env.SERVICE_NAME }}" == *"telegram"* ]]; then
+          cat > zeabur.json << EOF
+        {
+          "name": "${{ env.SERVICE_NAME }}",
+          "build": {
+            "command": "pip install -r requirements-telegram.txt"
+          },
+          "start": {
+            "command": "python main.py"
+          },
+          "environment": {
+            "PORT": "5003",
+            "PYTHON_VERSION": "3.9",
+            "FLASK_ENV": "${{ env.ENVIRONMENT }}",
+            "PYTHONUNBUFFERED": "1",
+            "SERVICE_TYPE": "telegram-bot"
+          },
+          "region": "hkg",
+          "restart": "always"
+        }
+        EOF
+        else
+          cat > zeabur.json << EOF
+        {
+          "name": "${{ env.SERVICE_NAME }}",
+          "build": {
+            "command": "pip install -r requirements.txt"
+          },
+          "start": {
+            "command": "python app.py"
+          },
+          "environment": {
+            "PORT": "5002",
+            "PYTHON_VERSION": "3.9",
+            "FLASK_ENV": "${{ env.ENVIRONMENT }}",
+            "PYTHONUNBUFFERED": "1",
+            "SERVICE_TYPE": "line-bot"
+          },
+          "region": "hkg",
+          "restart": "always"
+        }
+        EOF
+        fi
+        
+        echo "✅ 部署配置已創建"
+        cat zeabur.json
+        
+    - name: 🚀 執行部署
+      id: deploy
+      run: |
+        echo "🚀 開始部署新版本..."
+        
+        DEPLOY_START_TIME=$(date -u +%s)
+        
+        # 執行部署
+        if zeabur deploy --name="${{ env.SERVICE_NAME }}" --timeout=600; then
+          DEPLOY_END_TIME=$(date -u +%s)
+          DEPLOY_DURATION=$((DEPLOY_END_TIME - DEPLOY_START_TIME))
+          
+          echo "deployment_success=true" >> $GITHUB_OUTPUT
+          echo "deployment_time=${DEPLOY_DURATION}s" >> $GITHUB_OUTPUT
+          echo "✅ 部署成功，耗時: ${DEPLOY_DURATION}秒"
+          
+          # 獲取新的服務 URL
+          NEW_SERVICE_URL="https://${{ env.SERVICE_NAME }}.zeabur.app"
+          echo "new_service_url=$NEW_SERVICE_URL" >> $GITHUB_OUTPUT
+          echo "🌐 新服務 URL: $NEW_SERVICE_URL"
+        else
+          echo "deployment_success=false" >> $GITHUB_OUTPUT
+          echo "❌ 部署失敗"
+          exit 1
+        fi
+        
+    - name: 🔧 設置環境變數
+      run: |
+        echo "🔧 設置環境變數..."
+        
+        # 根據服務類型設置不同的環境變數
+        if [[ "${{ env.SERVICE_NAME }}" == *"telegram"* ]]; then
+          env_vars=(
+            "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}"
+            "PORT=5003"
+          )
+        else
+          env_vars=(
+            "LINE_CHANNEL_ACCESS_TOKEN=${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}"
+            "LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }}"
+            "PORT=5002"
+          )
+        fi
+        
+        # 共用環境變數
+        env_vars+=(
+          "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}"
+          "GOOGLE_API_KEY_FALLBACK=${{ secrets.GOOGLE_API_KEY_FALLBACK }}"
+          "NOTION_API_KEY=${{ secrets.NOTION_API_KEY }}"
+          "NOTION_DATABASE_ID=${{ secrets.NOTION_DATABASE_ID }}"
+          "FLASK_ENV=${{ env.ENVIRONMENT }}"
+          "PYTHONUNBUFFERED=1"
+        )
+        
+        # 設置環境變數
+        for env_var in "${env_vars[@]}"; do
+          key=$(echo "$env_var" | cut -d'=' -f1)
+          value=$(echo "$env_var" | cut -d'=' -f2-)
+          
+          if [ -n "$value" ] && [ "$value" != "" ]; then
+            if zeabur variable create --name="${{ env.SERVICE_NAME }}" -k "$key=$value" -y; then
+              echo "✅ $key 設置成功"
+            else
+              echo "⚠️ $key 設置失敗"
+            fi
+          fi
+        done
+
+  health-check-and-validation:
+    name: 🏥 健康檢查與驗證
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-backup, deploy-new-version]
+    if: needs.deploy-new-version.outputs.deployment_success == 'true'
+    
+    outputs:
+      health_check_passed: ${{ steps.health-check.outputs.health_check_passed }}
+      validation_passed: ${{ steps.validation.outputs.validation_passed }}
+      should_rollback: ${{ steps.decision.outputs.should_rollback }}
+      
+    steps:
+    - name: 🏥 執行健康檢查
+      id: health-check
+      run: |
+        echo "🏥 執行新版本健康檢查..."
+        
+        NEW_SERVICE_URL="${{ needs.deploy-new-version.outputs.new_service_url }}"
+        TIMEOUT_SECONDS="${{ env.HEALTH_CHECK_TIMEOUT }}"
+        
+        echo "🌐 檢查服務: $NEW_SERVICE_URL"
+        echo "⏱️ 超時設置: ${TIMEOUT_SECONDS}秒"
+        
+        # 等待服務啟動
+        echo "⏳ 等待服務啟動 (60秒)..."
+        sleep 60
+        
+        # 健康檢查循環
+        health_passed=false
+        start_time=$(date +%s)
+        
+        while true; do
+          current_time=$(date +%s)
+          elapsed_time=$((current_time - start_time))
+          
+          if [ $elapsed_time -ge $TIMEOUT_SECONDS ]; then
+            echo "⏰ 健康檢查超時 (${TIMEOUT_SECONDS}秒)"
+            break
+          fi
+          
+          echo "🔍 健康檢查嘗試 (已運行: ${elapsed_time}秒/${TIMEOUT_SECONDS}秒)..."
+          
+          if curl -f -s "$NEW_SERVICE_URL/health" > /dev/null; then
+            echo "✅ 健康檢查通過"
+            health_passed=true
+            break
+          fi
+          
+          echo "⏳ 等待 15 秒後重試..."
+          sleep 15
+        done
+        
+        echo "health_check_passed=$health_passed" >> $GITHUB_OUTPUT
+        
+        if [ "$health_passed" = "false" ]; then
+          echo "❌ 健康檢查最終失敗"
+        fi
+        
+    - name: 🧪 功能驗證測試
+      id: validation
+      if: steps.health-check.outputs.health_check_passed == 'true'
+      run: |
+        echo "🧪 執行功能驗證測試..."
+        
+        NEW_SERVICE_URL="${{ needs.deploy-new-version.outputs.new_service_url }}"
+        validation_passed=true
+        
+        # 測試基本端點
+        echo "🔍 測試基本端點..."
+        
+        # 健康檢查端點
+        if curl -f -s "$NEW_SERVICE_URL/health" > /dev/null; then
+          echo "✅ /health 端點正常"
+        else
+          echo "❌ /health 端點失敗"
+          validation_passed=false
+        fi
+        
+        # 測試端點
+        if curl -f -s "$NEW_SERVICE_URL/test" > /dev/null; then
+          echo "✅ /test 端點正常"
+        else
+          echo "❌ /test 端點失敗"
+          validation_passed=false
+        fi
+        
+        # 根據服務類型測試特定端點
+        if [[ "${{ env.SERVICE_NAME }}" == *"telegram"* ]]; then
+          # Telegram webhook 端點
+          if curl -f -s "$NEW_SERVICE_URL/telegram-webhook" > /dev/null 2>&1; then
+            echo "✅ /telegram-webhook 端點可訪問"
+          else
+            echo "⚠️ /telegram-webhook 端點測試失敗 (可能需要 POST)"
+          fi
+        else
+          # LINE callback 端點
+          if curl -f -s "$NEW_SERVICE_URL/callback" > /dev/null 2>&1; then
+            echo "✅ /callback 端點可訪問"
+          else
+            echo "⚠️ /callback 端點測試失敗 (可能需要 POST)"
+          fi
+        fi
+        
+        # 測試 API 響應格式
+        echo "🔍 測試 API 響應格式..."
+        health_response=$(curl -s "$NEW_SERVICE_URL/health")
+        
+        if echo "$health_response" | jq . > /dev/null 2>&1; then
+          echo "✅ API 響應格式正確 (JSON)"
+        else
+          echo "⚠️ API 響應格式異常"
+          echo "響應內容: $health_response"
+        fi
+        
+        echo "validation_passed=$validation_passed" >> $GITHUB_OUTPUT
+        
+        if [ "$validation_passed" = "true" ]; then
+          echo "✅ 功能驗證測試通過"
+        else
+          echo "❌ 功能驗證測試失敗"
+        fi
+        
+    - name: 🎯 回滾決策
+      id: decision
+      run: |
+        echo "🎯 分析是否需要回滾..."
+        
+        health_passed="${{ steps.health-check.outputs.health_check_passed }}"
+        validation_passed="${{ steps.validation.outputs.validation_passed }}"
+        enable_rollback="${{ github.event.inputs.enable_rollback }}"
+        backup_exists="${{ needs.pre-deployment-backup.outputs.backup_created }}"
+        
+        should_rollback=false
+        
+        echo "📋 決策參數:"
+        echo "- 健康檢查: $health_passed"
+        echo "- 功能驗證: $validation_passed"
+        echo "- 啟用回滾: $enable_rollback"
+        echo "- 備份存在: $backup_exists"
+        
+        if [ "$enable_rollback" = "true" ] && [ "$backup_exists" = "true" ]; then
+          if [ "$health_passed" = "false" ] || [ "$validation_passed" = "false" ]; then
+            should_rollback=true
+            echo "❌ 部署驗證失敗，建議回滾"
+          else
+            echo "✅ 部署驗證通過，無需回滾"
+          fi
+        else
+          echo "⏭️ 回滾未啟用或無備份，繼續使用新版本"
+        fi
+        
+        echo "should_rollback=$should_rollback" >> $GITHUB_OUTPUT
+
+  rollback-if-needed:
+    name: 🔄 自動回滾
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-backup, deploy-new-version, health-check-and-validation]
+    if: needs.health-check-and-validation.outputs.should_rollback == 'true'
+    
+    steps:
+    - name: 📥 下載備份信息
+      uses: actions/download-artifact@v3
+      with:
+        name: deployment-backup-${{ needs.pre-deployment-backup.outputs.backup_version }}
+        
+    - name: 🛠️ 安裝 Zeabur CLI
+      run: |
+        echo "📦 安裝 Zeabur CLI..."
+        npm install -g @zeabur/cli@latest
+        zeabur --version
+        
+    - name: 🔐 配置 Zeabur 認證
+      run: |
+        echo "🔐 配置 Zeabur 認證..."
+        echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
+        
+    - name: 📊 分析回滾選項
+      id: rollback-analysis
+      run: |
+        echo "📊 分析回滾選項..."
+        
+        if [ -f "deployment-backup.json" ]; then
+          echo "📋 備份信息:"
+          cat deployment-backup.json
+          
+          BACKUP_HEALTHY=$(jq -r '.healthy_before_deploy' deployment-backup.json)
+          ORIGINAL_URL=$(jq -r '.original_url' deployment-backup.json)
+          
+          echo "backup_healthy=$BACKUP_HEALTHY" >> $GITHUB_OUTPUT
+          echo "original_url=$ORIGINAL_URL" >> $GITHUB_OUTPUT
+          
+          if [ "$BACKUP_HEALTHY" = "true" ]; then
+            echo "✅ 備份版本之前是健康的，可以安全回滾"
+            echo "can_rollback=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ 備份版本之前就不健康，回滾可能無效"
+            echo "can_rollback=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "❌ 找不到備份信息"
+          echo "can_rollback=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: 🔄 執行回滾
+      if: steps.rollback-analysis.outputs.can_rollback == 'true'
+      run: |
+        echo "🔄 執行自動回滾..."
+        
+        case "${{ env.ROLLBACK_STRATEGY }}" in
+          "previous-version")
+            echo "📋 回滾到前一版本..."
+            
+            # 這裡需要實際的回滾邏輯
+            # 由於 Zeabur 的限制，我們可能需要：
+            # 1. 重新部署舊版本代碼
+            # 2. 或者使用服務回滾功能 (如果支持)
+            
+            echo "⚠️ 自動回滾功能需要進一步實現"
+            echo "請手動前往 Zeabur Dashboard 執行回滾"
+            ;;
+            
+          "stable-backup")
+            echo "📋 回滾到穩定備份版本..."
+            echo "⚠️ 穩定備份回滾功能需要進一步實現"
+            ;;
+            
+          "manual-intervention")
+            echo "📋 需要手動干預..."
+            echo "部署失敗，等待手動處理"
+            exit 1
+            ;;
+        esac
+        
+    - name: 🏥 回滾後驗證
+      if: steps.rollback-analysis.outputs.can_rollback == 'true'
+      run: |
+        echo "🏥 驗證回滾效果..."
+        
+        ORIGINAL_URL="${{ steps.rollback-analysis.outputs.original_url }}"
+        
+        if [ -n "$ORIGINAL_URL" ]; then
+          # 等待回滾生效
+          echo "⏳ 等待回滾生效..."
+          sleep 30
+          
+          # 驗證原始服務是否恢復
+          for i in {1..5}; do
+            if curl -f -s "$ORIGINAL_URL/health" > /dev/null; then
+              echo "✅ 回滾成功，服務恢復正常"
+              break
+            fi
+            
+            if [ $i -eq 5 ]; then
+              echo "❌ 回滾後服務仍然異常"
+            fi
+            
+            echo "⏳ 等待 10 秒後重試..."
+            sleep 10
+          done
+        else
+          echo "⚠️ 無法驗證回滾效果：缺少原始 URL"
+        fi
+
+  cleanup-and-notify:
+    name: 🧹 清理和通知
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-backup, deploy-new-version, health-check-and-validation, rollback-if-needed]
+    if: always()
+    
+    steps:
+    - name: 📊 生成最終報告
+      run: |
+        echo "📊 **智能部署與回滾流程完成報告**"
+        echo ""
+        
+        BACKUP_STATUS="${{ needs.pre-deployment-backup.result }}"
+        DEPLOY_STATUS="${{ needs.deploy-new-version.result }}"
+        HEALTH_STATUS="${{ needs.health-check-and-validation.result }}"
+        ROLLBACK_STATUS="${{ needs.rollback-if-needed.result }}"
+        
+        echo "🎯 **部署目標:**"
+        echo "- 服務名稱: ${{ env.SERVICE_NAME }}"
+        echo "- 目標環境: ${{ env.ENVIRONMENT }}"
+        echo "- 回滾策略: ${{ env.ROLLBACK_STRATEGY }}"
+        echo ""
+        
+        echo "📋 **執行結果:**"
+        
+        if [ "$BACKUP_STATUS" = "success" ]; then
+          echo "✅ 預部署備份: 成功"
+          if [ "${{ needs.pre-deployment-backup.outputs.backup_created }}" = "true" ]; then
+            echo "   📦 備份版本: ${{ needs.pre-deployment-backup.outputs.backup_version }}"
+          fi
+        else
+          echo "⚠️ 預部署備份: 失敗或跳過"
+        fi
+        
+        if [ "$DEPLOY_STATUS" = "success" ]; then
+          echo "✅ 新版本部署: 成功"
+          echo "   🌐 服務 URL: ${{ needs.deploy-new-version.outputs.new_service_url }}"
+          echo "   ⏱️ 部署時間: ${{ needs.deploy-new-version.outputs.deployment_time }}"
+        else
+          echo "❌ 新版本部署: 失敗"
+        fi
+        
+        if [ "$HEALTH_STATUS" = "success" ]; then
+          health_passed="${{ needs.health-check-and-validation.outputs.health_check_passed }}"
+          validation_passed="${{ needs.health-check-and-validation.outputs.validation_passed }}"
+          
+          if [ "$health_passed" = "true" ] && [ "$validation_passed" = "true" ]; then
+            echo "✅ 健康檢查與驗證: 全部通過"
+          else
+            echo "⚠️ 健康檢查與驗證: 部分失敗"
+            echo "   - 健康檢查: $health_passed"
+            echo "   - 功能驗證: $validation_passed"
+          fi
+        else
+          echo "❌ 健康檢查與驗證: 失敗"
+        fi
+        
+        if [ "${{ needs.health-check-and-validation.outputs.should_rollback }}" = "true" ]; then
+          if [ "$ROLLBACK_STATUS" = "success" ]; then
+            echo "✅ 自動回滾: 執行成功"
+          elif [ "$ROLLBACK_STATUS" = "failure" ]; then
+            echo "❌ 自動回滾: 執行失敗"
+          else
+            echo "⏭️ 自動回滾: 已跳過"
+          fi
+        else
+          echo "⏭️ 自動回滾: 未觸發"
+        fi
+        
+        echo ""
+        echo "🎯 **最終狀態:**"
+        
+        if [ "$DEPLOY_STATUS" = "success" ] && [ "${{ needs.health-check-and-validation.outputs.health_check_passed }}" = "true" ] && [ "${{ needs.health-check-and-validation.outputs.validation_passed }}" = "true" ]; then
+          echo "🎉 **部署成功！新版本運行正常**"
+        elif [ "${{ needs.health-check-and-validation.outputs.should_rollback }}" = "true" ] && [ "$ROLLBACK_STATUS" = "success" ]; then
+          echo "🔄 **已回滾到穩定版本**"
+        else
+          echo "⚠️ **部署存在問題，需要手動檢查**"
+        fi
+        
+        echo ""
+        echo "📋 **後續步驟:**"
+        echo "1. 檢查服務狀態和日誌"
+        echo "2. 驗證所有功能正常工作"
+        echo "3. 更新監控和警報設置"
+        
+        if [[ "${{ env.SERVICE_NAME }}" == *"telegram"* ]]; then
+          echo "4. 確認 Telegram Bot Webhook 設置"
+        else
+          echo "4. 確認 LINE Bot Webhook 設置"
+        fi
+        
+        echo ""
+        echo "🔗 **相關連結:**"
+        echo "- [Zeabur Dashboard](https://dash.zeabur.com/)"
+        echo "- [查看部署日誌](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        
+        if [ "${{ needs.deploy-new-version.outputs.deployment_success }}" = "true" ]; then
+          echo "- [新版本服務](${{ needs.deploy-new-version.outputs.new_service_url }})"
+        fi

@@ -1,0 +1,40 @@
+{
+  "name": "async-namecard-bot",
+  "build": {
+    "command": "pip install -r deployment/async_requirements.txt"
+  },
+  "start": {
+    "command": "hypercorn src.namecard.api.async_app:app --bind 0.0.0.0:$PORT --workers 4 --worker-class asyncio"
+  },
+  "port": "$PORT",
+  "environment": {
+    "PORT": "5002",
+    "PYTHON_VERSION": "3.11",
+    "FLASK_ENV": "production",
+    "PYTHONUNBUFFERED": "1",
+    "SERVICE_TYPE": "async-namecard-bot",
+    "HYPERCORN_WORKERS": "4",
+    "HYPERCORN_WORKER_CLASS": "asyncio",
+    "MAX_CONCURRENT_REQUESTS": "50",
+    "CACHE_MEMORY_MB": "200",
+    "CACHE_DISK_MB": "1000"
+  },
+  "regions": ["hkg"],
+  "healthcheck": {
+    "path": "/health",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3,
+    "start_period": 60
+  },
+  "scaling": {
+    "min_instances": 1,
+    "max_instances": 3,
+    "target_cpu": 70,
+    "target_memory": 80
+  },
+  "resources": {
+    "memory": "1GB",
+    "cpu": "1.0"
+  }
+}

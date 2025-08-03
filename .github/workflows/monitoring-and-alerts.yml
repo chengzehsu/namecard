@@ -1,0 +1,667 @@
+name: 📊 部署監控與警報系統
+
+on:
+  schedule:
+    # 每 5 分鐘執行一次健康檢查
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: '要監控的服務'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - namecard-telegram-bot
+        - namecard-line-bot
+      check_type:
+        description: '檢查類型'
+        required: false
+        default: 'comprehensive'
+        type: choice
+        options:
+        - comprehensive
+        - health-only
+        - performance
+        - api-status
+      alert_threshold:
+        description: '警報閾值 (失敗次數)'
+        required: false
+        default: '3'
+        type: string
+
+env:
+  SERVICE_TO_CHECK: ${{ github.event.inputs.service_name || 'all' }}
+  CHECK_TYPE: ${{ github.event.inputs.check_type || 'comprehensive' }}
+  ALERT_THRESHOLD: ${{ github.event.inputs.alert_threshold || '3' }}
+
+jobs:
+  service-discovery:
+    name: 🔍 服務發現
+    runs-on: ubuntu-latest
+    
+    outputs:
+      services: ${{ steps.discover.outputs.services }}
+      telegram_url: ${{ steps.discover.outputs.telegram_url }}
+      line_url: ${{ steps.discover.outputs.line_url }}
+      
+    steps:
+    - name: 🛠️ 安裝 Zeabur CLI
+      run: |
+        echo "📦 安裝 Zeabur CLI..."
+        npm install -g @zeabur/cli@latest
+        zeabur --version
+        
+    - name: 🔐 配置 Zeabur 認證
+      run: |
+        echo "🔐 配置 Zeabur 認證..."
+        echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
+        
+    - name: 🔍 發現可用服務
+      id: discover
+      run: |
+        echo "🔍 發現 Zeabur 上的服務..."
+        
+        # 獲取服務列表
+        zeabur service list > services_list.txt || {
+          echo "⚠️ 無法獲取服務列表，使用預設配置"
+          echo "services=[]" >> $GITHUB_OUTPUT
+          exit 0
+        }
+        
+        echo "📋 服務列表:"
+        cat services_list.txt
+        
+        # 解析服務 URL
+        telegram_url=""
+        line_url=""
+        services_array="["
+        
+        # 查找 Telegram Bot 服務
+        if grep -q "namecard-telegram-bot" services_list.txt; then
+          telegram_url="https://namecard-telegram-bot.zeabur.app"
+          services_array="${services_array}\"telegram\","
+          echo "✅ 找到 Telegram Bot 服務: $telegram_url"
+        fi
+        
+        # 查找 LINE Bot 服務
+        if grep -q "namecard-line-bot" services_list.txt; then
+          line_url="https://namecard-line-bot.zeabur.app"
+          services_array="${services_array}\"line\","
+          echo "✅ 找到 LINE Bot 服務: $line_url"
+        fi
+        
+        # 檢查 namecard-app (通用服務)
+        if grep -q "namecard-app" services_list.txt; then
+          # 檢查當前配置
+          app_url="https://namecard-app.zeabur.app"
+          
+          # 簡單檢查服務類型
+          if curl -s "$app_url/health" | grep -q "telegram" 2>/dev/null; then
+            telegram_url="$app_url"
+            services_array="${services_array}\"telegram\","
+            echo "✅ namecard-app 配置為 Telegram Bot: $app_url"
+          elif curl -s "$app_url/health" | grep -q "line" 2>/dev/null; then
+            line_url="$app_url"
+            services_array="${services_array}\"line\","
+            echo "✅ namecard-app 配置為 LINE Bot: $app_url"
+          else
+            # 假設為 Telegram Bot (當前配置)
+            telegram_url="$app_url"
+            services_array="${services_array}\"telegram\","
+            echo "✅ namecard-app 假設為 Telegram Bot: $app_url"
+          fi
+        fi
+        
+        # 完成 JSON 陣列
+        services_array="${services_array%,}]"
+        
+        echo "services=$services_array" >> $GITHUB_OUTPUT
+        echo "telegram_url=$telegram_url" >> $GITHUB_OUTPUT
+        echo "line_url=$line_url" >> $GITHUB_OUTPUT
+        
+        echo ""
+        echo "📊 發現的服務:"
+        echo "- Telegram Bot: $telegram_url"
+        echo "- LINE Bot: $line_url"
+        echo "- 服務陣列: $services_array"
+
+  telegram-bot-monitoring:
+    name: 📱 Telegram Bot 監控
+    runs-on: ubuntu-latest
+    needs: service-discovery
+    if: contains(needs.service-discovery.outputs.services, 'telegram') && (github.event.inputs.service_name == 'all' || github.event.inputs.service_name == 'namecard-telegram-bot')
+    
+    outputs:
+      status: ${{ steps.monitor.outputs.status }}
+      response_time: ${{ steps.monitor.outputs.response_time }}
+      error_count: ${{ steps.monitor.outputs.error_count }}
+      
+    steps:
+    - name: 📱 監控 Telegram Bot
+      id: monitor
+      run: |
+        echo "📱 開始監控 Telegram Bot..."
+        
+        TELEGRAM_URL="${{ needs.service-discovery.outputs.telegram_url }}"
+        
+        if [ -z "$TELEGRAM_URL" ]; then
+          echo "⚠️ Telegram Bot URL 未找到"
+          echo "status=unknown" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "🌐 監控服務: $TELEGRAM_URL"
+        
+        # 健康檢查
+        health_status="unknown"
+        response_time=0
+        error_count=0
+        
+        start_time=$(date +%s%3N)
+        
+        if curl -f -s "$TELEGRAM_URL/health" > health_response.json; then
+          end_time=$(date +%s%3N)
+          response_time=$((end_time - start_time))
+          health_status="healthy"
+          
+          echo "✅ 健康檢查通過"
+          echo "⏱️ 響應時間: ${response_time}ms"
+          
+          # 解析健康檢查響應
+          if [ -f "health_response.json" ]; then
+            echo "📋 健康檢查響應:"
+            cat health_response.json
+            
+            # 檢查特定欄位
+            if jq -e '.status' health_response.json >/dev/null 2>&1; then
+              status_field=$(jq -r '.status' health_response.json)
+              echo "狀態欄位: $status_field"
+            fi
+          fi
+        else
+          health_status="unhealthy"
+          error_count=1
+          echo "❌ 健康檢查失敗"
+        fi
+        
+        # 綜合檢查 (如果啟用)
+        if [ "${{ env.CHECK_TYPE }}" = "comprehensive" ]; then
+          echo "🔍 執行綜合檢查..."
+          
+          # 測試端點檢查
+          if curl -f -s "$TELEGRAM_URL/test" > /dev/null; then
+            echo "✅ /test 端點正常"
+          else
+            echo "⚠️ /test 端點異常"
+            error_count=$((error_count + 1))
+          fi
+          
+          # Webhook 端點檢查
+          webhook_status=$(curl -s -o /dev/null -w "%{http_code}" "$TELEGRAM_URL/telegram-webhook")
+          if [ "$webhook_status" = "405" ] || [ "$webhook_status" = "200" ]; then
+            echo "✅ /telegram-webhook 端點可訪問 (HTTP $webhook_status)"
+          else
+            echo "⚠️ /telegram-webhook 端點異常 (HTTP $webhook_status)"
+            error_count=$((error_count + 1))
+          fi
+        fi
+        
+        # 效能檢查 (如果啟用)
+        if [ "${{ env.CHECK_TYPE }}" = "performance" ] || [ "${{ env.CHECK_TYPE }}" = "comprehensive" ]; then
+          echo "📊 執行效能檢查..."
+          
+          # 多次請求測試平均響應時間
+          total_time=0
+          successful_requests=0
+          
+          for i in {1..5}; do
+            start=$(date +%s%3N)
+            if curl -f -s "$TELEGRAM_URL/health" > /dev/null; then
+              end=$(date +%s%3N)
+              req_time=$((end - start))
+              total_time=$((total_time + req_time))
+              successful_requests=$((successful_requests + 1))
+            fi
+          done
+          
+          if [ $successful_requests -gt 0 ]; then
+            avg_response_time=$((total_time / successful_requests))
+            echo "📊 平均響應時間: ${avg_response_time}ms (${successful_requests}/5 成功)"
+            
+            # 響應時間警報
+            if [ $avg_response_time -gt 3000 ]; then
+              echo "⚠️ 響應時間過慢: ${avg_response_time}ms > 3000ms"
+              error_count=$((error_count + 1))
+            fi
+          else
+            echo "❌ 所有效能測試請求失敗"
+            error_count=$((error_count + 1))
+          fi
+        fi
+        
+        echo "status=$health_status" >> $GITHUB_OUTPUT
+        echo "response_time=$response_time" >> $GITHUB_OUTPUT
+        echo "error_count=$error_count" >> $GITHUB_OUTPUT
+        
+        echo ""
+        echo "📊 Telegram Bot 監控結果:"
+        echo "- 狀態: $health_status"
+        echo "- 響應時間: ${response_time}ms"
+        echo "- 錯誤計數: $error_count"
+
+  line-bot-monitoring:
+    name: 📞 LINE Bot 監控
+    runs-on: ubuntu-latest
+    needs: service-discovery
+    if: contains(needs.service-discovery.outputs.services, 'line') && (github.event.inputs.service_name == 'all' || github.event.inputs.service_name == 'namecard-line-bot')
+    
+    outputs:
+      status: ${{ steps.monitor.outputs.status }}
+      response_time: ${{ steps.monitor.outputs.response_time }}
+      error_count: ${{ steps.monitor.outputs.error_count }}
+      
+    steps:
+    - name: 📞 監控 LINE Bot
+      id: monitor
+      run: |
+        echo "📞 開始監控 LINE Bot..."
+        
+        LINE_URL="${{ needs.service-discovery.outputs.line_url }}"
+        
+        if [ -z "$LINE_URL" ]; then
+          echo "⚠️ LINE Bot URL 未找到"
+          echo "status=unknown" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "🌐 監控服務: $LINE_URL"
+        
+        # 健康檢查 (與 Telegram Bot 類似的邏輯)
+        health_status="unknown"
+        response_time=0
+        error_count=0
+        
+        start_time=$(date +%s%3N)
+        
+        if curl -f -s "$LINE_URL/health" > health_response.json; then
+          end_time=$(date +%s%3N)
+          response_time=$((end_time - start_time))
+          health_status="healthy"
+          
+          echo "✅ 健康檢查通過"
+          echo "⏱️ 響應時間: ${response_time}ms"
+        else
+          health_status="unhealthy"
+          error_count=1
+          echo "❌ 健康檢查失敗"
+        fi
+        
+        # 綜合檢查
+        if [ "${{ env.CHECK_TYPE }}" = "comprehensive" ]; then
+          # 測試端點檢查
+          if curl -f -s "$LINE_URL/test" > /dev/null; then
+            echo "✅ /test 端點正常"
+          else
+            echo "⚠️ /test 端點異常"
+            error_count=$((error_count + 1))
+          fi
+          
+          # Callback 端點檢查
+          callback_status=$(curl -s -o /dev/null -w "%{http_code}" "$LINE_URL/callback")
+          if [ "$callback_status" = "405" ] || [ "$callback_status" = "200" ]; then
+            echo "✅ /callback 端點可訪問 (HTTP $callback_status)"
+          else
+            echo "⚠️ /callback 端點異常 (HTTP $callback_status)"
+            error_count=$((error_count + 1))
+          fi
+        fi
+        
+        echo "status=$health_status" >> $GITHUB_OUTPUT
+        echo "response_time=$response_time" >> $GITHUB_OUTPUT
+        echo "error_count=$error_count" >> $GITHUB_OUTPUT
+        
+        echo ""
+        echo "📊 LINE Bot 監控結果:"
+        echo "- 狀態: $health_status"
+        echo "- 響應時間: ${response_time}ms"
+        echo "- 錯誤計數: $error_count"
+
+  api-status-monitoring:
+    name: 🔗 API 狀態監控
+    runs-on: ubuntu-latest
+    needs: [service-discovery, telegram-bot-monitoring, line-bot-monitoring]
+    if: always() && (github.event.inputs.check_type == 'api-status' || github.event.inputs.check_type == 'comprehensive')
+    
+    outputs:
+      google_api_status: ${{ steps.api-check.outputs.google_api_status }}
+      notion_api_status: ${{ steps.api-check.outputs.notion_api_status }}
+      
+    steps:
+    - name: 🔗 檢查外部 API 狀態
+      id: api-check
+      run: |
+        echo "🔗 檢查外部 API 服務狀態..."
+        
+        google_api_status="unknown"
+        notion_api_status="unknown"
+        
+        # Google AI API 狀態檢查
+        echo "🤖 檢查 Google AI API..."
+        if curl -f -s "https://generativelanguage.googleapis.com/v1/models?key=test" > /dev/null 2>&1; then
+          google_api_status="reachable"
+          echo "✅ Google AI API 可達"
+        else
+          # 檢查是否為 API key 問題 (正常情況)
+          response=$(curl -s "https://generativelanguage.googleapis.com/v1/models?key=invalid" 2>&1)
+          if echo "$response" | grep -q "API_KEY_INVALID" 2>/dev/null; then
+            google_api_status="reachable"
+            echo "✅ Google AI API 可達 (API key 驗證正常)"
+          else
+            google_api_status="unreachable"
+            echo "❌ Google AI API 不可達"
+          fi
+        fi
+        
+        # Notion API 狀態檢查
+        echo "📝 檢查 Notion API..."
+        if curl -f -s "https://api.notion.com/v1/users/me" -H "Authorization: Bearer invalid" > /dev/null 2>&1; then
+          notion_api_status="reachable"
+          echo "✅ Notion API 可達"
+        else
+          response=$(curl -s "https://api.notion.com/v1/users/me" -H "Authorization: Bearer invalid" 2>&1)
+          if echo "$response" | grep -q "unauthorized" 2>/dev/null; then
+            notion_api_status="reachable"
+            echo "✅ Notion API 可達 (認證驗證正常)"
+          else
+            notion_api_status="unreachable"
+            echo "❌ Notion API 不可達"
+          fi
+        fi
+        
+        echo "google_api_status=$google_api_status" >> $GITHUB_OUTPUT
+        echo "notion_api_status=$notion_api_status" >> $GITHUB_OUTPUT
+        
+        echo ""
+        echo "📊 API 狀態監控結果:"
+        echo "- Google AI API: $google_api_status"
+        echo "- Notion API: $notion_api_status"
+
+  alert-evaluation:
+    name: 🚨 警報評估
+    runs-on: ubuntu-latest
+    needs: [service-discovery, telegram-bot-monitoring, line-bot-monitoring, api-status-monitoring]
+    if: always()
+    
+    outputs:
+      should_alert: ${{ steps.evaluate.outputs.should_alert }}
+      alert_level: ${{ steps.evaluate.outputs.alert_level }}
+      alert_message: ${{ steps.evaluate.outputs.alert_message }}
+      
+    steps:
+    - name: 🚨 評估警報條件
+      id: evaluate
+      run: |
+        echo "🚨 評估警報條件..."
+        
+        should_alert=false
+        alert_level="info"
+        alert_messages=()
+        
+        # 評估 Telegram Bot 狀態
+        telegram_status="${{ needs.telegram-bot-monitoring.outputs.status }}"
+        telegram_errors="${{ needs.telegram-bot-monitoring.outputs.error_count }}"
+        telegram_response_time="${{ needs.telegram-bot-monitoring.outputs.response_time }}"
+        
+        if [ "$telegram_status" = "unhealthy" ]; then
+          should_alert=true
+          alert_level="critical"
+          alert_messages+=("❌ Telegram Bot 健康檢查失敗")
+        elif [ "$telegram_errors" -gt "${{ env.ALERT_THRESHOLD }}" ]; then
+          should_alert=true
+          alert_level="warning"
+          alert_messages+=("⚠️ Telegram Bot 錯誤過多: $telegram_errors")
+        elif [ "$telegram_response_time" -gt 3000 ] && [ "$telegram_response_time" -gt 0 ]; then
+          should_alert=true
+          alert_level="warning"
+          alert_messages+=("⚠️ Telegram Bot 響應時間過慢: ${telegram_response_time}ms")
+        fi
+        
+        # 評估 LINE Bot 狀態
+        line_status="${{ needs.line-bot-monitoring.outputs.status }}"
+        line_errors="${{ needs.line-bot-monitoring.outputs.error_count }}"
+        line_response_time="${{ needs.line-bot-monitoring.outputs.response_time }}"
+        
+        if [ "$line_status" = "unhealthy" ]; then
+          should_alert=true
+          alert_level="critical"
+          alert_messages+=("❌ LINE Bot 健康檢查失敗")
+        elif [ "$line_errors" -gt "${{ env.ALERT_THRESHOLD }}" ]; then
+          should_alert=true
+          alert_level="warning"
+          alert_messages+=("⚠️ LINE Bot 錯誤過多: $line_errors")
+        fi
+        
+        # 評估 API 狀態
+        google_api_status="${{ needs.api-status-monitoring.outputs.google_api_status }}"
+        notion_api_status="${{ needs.api-status-monitoring.outputs.notion_api_status }}"
+        
+        if [ "$google_api_status" = "unreachable" ]; then
+          should_alert=true
+          alert_level="critical"
+          alert_messages+=("❌ Google AI API 不可達")
+        fi
+        
+        if [ "$notion_api_status" = "unreachable" ]; then
+          should_alert=true
+          alert_level="critical"
+          alert_messages+=("❌ Notion API 不可達")
+        fi
+        
+        # 建構警報訊息
+        if [ ${#alert_messages[@]} -gt 0 ]; then
+          alert_message=$(IFS=$'\n'; echo "${alert_messages[*]}")
+        else
+          alert_message="✅ 所有服務運行正常"
+        fi
+        
+        echo "should_alert=$should_alert" >> $GITHUB_OUTPUT
+        echo "alert_level=$alert_level" >> $GITHUB_OUTPUT
+        echo "alert_message<<EOF" >> $GITHUB_OUTPUT
+        echo "$alert_message" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo ""
+        echo "🚨 警報評估結果:"
+        echo "- 需要警報: $should_alert"
+        echo "- 警報級別: $alert_level"
+        echo "- 警報訊息:"
+        echo "$alert_message"
+
+  send-alerts:
+    name: 📢 發送警報
+    runs-on: ubuntu-latest
+    needs: [service-discovery, telegram-bot-monitoring, line-bot-monitoring, api-status-monitoring, alert-evaluation]
+    if: needs.alert-evaluation.outputs.should_alert == 'true'
+    
+    steps:
+    - name: 📢 發送 GitHub Issue 警報
+      if: needs.alert-evaluation.outputs.alert_level == 'critical'
+      uses: actions-ecosystem/action-create-issue@v1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        title: "🚨 系統監控警報 - ${{ needs.alert-evaluation.outputs.alert_level }}"
+        body: |
+          ## 🚨 系統監控檢測到問題
+          
+          **警報級別**: ${{ needs.alert-evaluation.outputs.alert_level }}
+          **檢測時間**: ${{ github.event.schedule || github.run_id }}
+          
+          ### 📊 服務狀態
+          
+          **Telegram Bot**:
+          - 狀態: ${{ needs.telegram-bot-monitoring.outputs.status || '未檢查' }}
+          - 響應時間: ${{ needs.telegram-bot-monitoring.outputs.response_time || 'N/A' }}ms
+          - 錯誤計數: ${{ needs.telegram-bot-monitoring.outputs.error_count || '0' }}
+          
+          **LINE Bot**:
+          - 狀態: ${{ needs.line-bot-monitoring.outputs.status || '未檢查' }}
+          - 響應時間: ${{ needs.line-bot-monitoring.outputs.response_time || 'N/A' }}ms
+          - 錯誤計數: ${{ needs.line-bot-monitoring.outputs.error_count || '0' }}
+          
+          **外部 API**:
+          - Google AI API: ${{ needs.api-status-monitoring.outputs.google_api_status || '未檢查' }}
+          - Notion API: ${{ needs.api-status-monitoring.outputs.notion_api_status || '未檢查' }}
+          
+          ### ⚠️ 具體問題
+          
+          ${{ needs.alert-evaluation.outputs.alert_message }}
+          
+          ### 🔧 建議行動
+          
+          1. 檢查 [Zeabur Dashboard](https://dash.zeabur.com/) 服務狀態
+          2. 查看應用日誌排查問題
+          3. 確認外部 API 服務可用性
+          4. 必要時執行服務重啟或回滾
+          
+          ### 🔗 相關連結
+          
+          - [監控工作流日誌](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          - [Zeabur Dashboard](https://dash.zeabur.com/)
+          
+          ---
+          *此警報由自動監控系統生成*
+        labels: |
+          bug
+          monitoring
+          ${{ needs.alert-evaluation.outputs.alert_level }}
+          
+    - name: 📝 記錄警報到 workflow 總結
+      run: |
+        echo "📝 記錄警報信息..."
+        
+        echo "## 🚨 監控警報報告" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**警報級別**: ${{ needs.alert-evaluation.outputs.alert_level }}" >> $GITHUB_STEP_SUMMARY
+        echo "**檢測時間**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 服務狀態總覽" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Telegram Bot 狀態
+        if [ "${{ needs.telegram-bot-monitoring.outputs.status }}" != "" ]; then
+          echo "**📱 Telegram Bot**: ${{ needs.telegram-bot-monitoring.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 響應時間: ${{ needs.telegram-bot-monitoring.outputs.response_time }}ms" >> $GITHUB_STEP_SUMMARY
+          echo "- 錯誤計數: ${{ needs.telegram-bot-monitoring.outputs.error_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # LINE Bot 狀態
+        if [ "${{ needs.line-bot-monitoring.outputs.status }}" != "" ]; then
+          echo "**📞 LINE Bot**: ${{ needs.line-bot-monitoring.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 響應時間: ${{ needs.line-bot-monitoring.outputs.response_time }}ms" >> $GITHUB_STEP_SUMMARY
+          echo "- 錯誤計數: ${{ needs.line-bot-monitoring.outputs.error_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # API 狀態
+        echo "**🔗 外部 API**:" >> $GITHUB_STEP_SUMMARY
+        echo "- Google AI API: ${{ needs.api-status-monitoring.outputs.google_api_status }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Notion API: ${{ needs.api-status-monitoring.outputs.notion_api_status }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### ⚠️ 警報詳情" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "${{ needs.alert-evaluation.outputs.alert_message }}" >> $GITHUB_STEP_SUMMARY
+
+  generate-report:
+    name: 📈 生成監控報告
+    runs-on: ubuntu-latest
+    needs: [service-discovery, telegram-bot-monitoring, line-bot-monitoring, api-status-monitoring, alert-evaluation]
+    if: always()
+    
+    steps:
+    - name: 📈 生成綜合監控報告
+      run: |
+        echo "📈 **系統監控報告**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**檢查時間**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "**檢查類型**: ${{ env.CHECK_TYPE }}" >> $GITHUB_STEP_SUMMARY
+        echo "**監控範圍**: ${{ env.SERVICE_TO_CHECK }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 服務狀態總覽
+        echo "## 📊 服務狀態總覽" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        overall_status="✅ 正常"
+        
+        # Telegram Bot
+        telegram_status="${{ needs.telegram-bot-monitoring.outputs.status }}"
+        if [ "$telegram_status" != "" ]; then
+          if [ "$telegram_status" = "healthy" ]; then
+            echo "- 📱 **Telegram Bot**: ✅ 正常" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- 📱 **Telegram Bot**: ❌ 異常" >> $GITHUB_STEP_SUMMARY
+            overall_status="⚠️ 有問題"
+          fi
+          echo "  - 響應時間: ${{ needs.telegram-bot-monitoring.outputs.response_time }}ms" >> $GITHUB_STEP_SUMMARY
+          echo "  - URL: ${{ needs.service-discovery.outputs.telegram_url }}" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- 📱 **Telegram Bot**: ⏭️ 未檢查" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # LINE Bot
+        line_status="${{ needs.line-bot-monitoring.outputs.status }}"
+        if [ "$line_status" != "" ]; then
+          if [ "$line_status" = "healthy" ]; then
+            echo "- 📞 **LINE Bot**: ✅ 正常" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- 📞 **LINE Bot**: ❌ 異常" >> $GITHUB_STEP_SUMMARY
+            overall_status="⚠️ 有問題"
+          fi
+          echo "  - 響應時間: ${{ needs.line-bot-monitoring.outputs.response_time }}ms" >> $GITHUB_STEP_SUMMARY
+          echo "  - URL: ${{ needs.service-discovery.outputs.line_url }}" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- 📞 **LINE Bot**: ⏭️ 未檢查" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # API 狀態
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🔗 外部 API 狀態" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        google_status="${{ needs.api-status-monitoring.outputs.google_api_status }}"
+        notion_status="${{ needs.api-status-monitoring.outputs.notion_api_status }}"
+        
+        if [ "$google_status" = "reachable" ]; then
+          echo "- 🤖 **Google AI API**: ✅ 可達" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- 🤖 **Google AI API**: ❌ 不可達" >> $GITHUB_STEP_SUMMARY
+          overall_status="⚠️ 有問題"
+        fi
+        
+        if [ "$notion_status" = "reachable" ]; then
+          echo "- 📝 **Notion API**: ✅ 可達" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- 📝 **Notion API**: ❌ 不可達" >> $GITHUB_STEP_SUMMARY
+          overall_status="⚠️ 有問題"
+        fi
+        
+        # 總體狀態
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🎯 總體狀態" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**系統狀態**: $overall_status" >> $GITHUB_STEP_SUMMARY
+        
+        # 警報狀態
+        if [ "${{ needs.alert-evaluation.outputs.should_alert }}" = "true" ]; then
+          echo "**警報狀態**: 🚨 有警報 (${{ needs.alert-evaluation.outputs.alert_level }})" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "**警報狀態**: ✅ 正常" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "*此報告由自動監控系統生成於 $(date -u '+%Y-%m-%d %H:%M:%S UTC')*" >> $GITHUB_STEP_SUMMARY

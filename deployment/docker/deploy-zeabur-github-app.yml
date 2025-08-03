@@ -1,0 +1,36 @@
+name: 簡化 Zeabur 部署（GitHub App 方式）
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: 🚀 部署到 Zeabur
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+    
+    - name: 📝 部署信息
+      run: |
+        echo "🚀 Zeabur GitHub App 自動部署"
+        echo "📅 部署時間: $(date)"
+        echo "🌿 分支: ${{ github.ref_name }}"
+        echo "📝 提交: ${{ github.sha }}"
+        echo "👤 觸發者: ${{ github.actor }}"
+        echo ""
+        echo "✅ 如果已正確設置 Zeabur GitHub App，部署會自動開始"
+        echo "🔍 請前往 Zeabur Dashboard 查看部署狀態: https://dash.zeabur.com/"
+    
+    - name: 📱 部署後設置提醒
+      run: |
+        echo ""
+        echo "📱 部署完成後，記得設置 Telegram Webhook:"
+        echo "   curl -X POST \"https://api.telegram.org/bot\$TELEGRAM_BOT_TOKEN/setWebhook\" \\"
+        echo "        -d \"url=https://your-app.zeabur.app/telegram-webhook\""
+        echo ""
+        echo "🧪 測試應用健康狀態:"
+        echo "   curl https://your-app.zeabur.app/health"

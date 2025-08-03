@@ -1,0 +1,55 @@
+# 異步名片處理系統依賴
+# 支援高並發、快取和效能監控
+
+# 異步 Web 框架
+quart==0.19.4
+hypercorn==0.14.4
+
+# LINE Bot SDK
+line-bot-sdk==3.5.0
+
+# Telegram Bot (如需要)
+python-telegram-bot==20.6
+
+# AI 和圖片處理
+google-generativeai==0.3.2
+Pillow==10.0.1
+
+# 資料庫和快取
+notion-client==2.2.1
+redis==5.0.1
+hiredis==2.2.3
+
+# 異步 HTTP 客戶端
+aiohttp==3.8.6
+httpx==0.25.0
+
+# 數據處理
+pandas==2.1.1
+numpy==1.25.2
+
+# 設定管理
+pydantic==2.4.2
+python-dotenv==1.0.0
+
+# 日誌和監控
+structlog==23.1.0
+prometheus-client==0.17.1
+
+# 效能監控
+psutil==5.9.5
+memory-profiler==0.61.0
+
+# 測試
+pytest==7.4.2
+pytest-asyncio==0.21.1
+pytest-benchmark==4.0.0
+
+# 開發工具
+black==23.9.1
+isort==5.12.0
+flake8==6.1.0
+
+# 部署
+gunicorn==21.2.0
+uvloop==0.17.0  # Linux 效能優化

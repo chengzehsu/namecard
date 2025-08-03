@@ -140,8 +140,12 @@ jobs:
       run: |
         echo "部署 Telegram Bot 到 Zeabur..."
         
-        # 使用環境變數認證和部署
-        zeabur deploy --environment production
+        # 使用環境變數認證和部署，顯示詳細輸出
+        echo "🔍 開始部署，顯示詳細日誌..."
+        zeabur deploy --environment production --verbose || {
+          echo "❌ 部署命令失敗，嘗試基本部署..."
+          zeabur deploy --environment production
+        }
         
         echo "⚙️ 設置環境變數到 Zeabur 服務..."
         

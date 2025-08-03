@@ -1,0 +1,716 @@
+name: 🚀 統一部署流程
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'main.py'
+      - 'telegram_main.py'
+      - 'telegram_app.py'
+      - 'app.py'
+      - 'requirements*.txt'
+      - 'zeabur.json'
+      - '.github/workflows/unified-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      service_type:
+        description: '部署服務類型'
+        required: true
+        default: 'telegram-bot'
+        type: choice
+        options:
+        - telegram-bot
+        - line-bot
+        - both
+      environment:
+        description: '部署環境'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+        - development
+      force_deploy:
+        description: '強制部署 (跳過檢查)'
+        required: false
+        default: false
+        type: boolean
+      deploy_strategy:
+        description: '部署策略'
+        required: false
+        default: 'update-existing'
+        type: choice
+        options:
+        - update-existing
+        - create-new
+        - blue-green
+
+env:
+  SERVICE_TYPE: ${{ github.event.inputs.service_type || 'telegram-bot' }}
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'production' }}
+  DEPLOY_STRATEGY: ${{ github.event.inputs.deploy_strategy || 'update-existing' }}
+
+jobs:
+  detect-changes:
+    name: 📊 變更檢測和服務選擇
+    runs-on: ubuntu-latest
+    
+    outputs:
+      should_deploy_telegram: ${{ steps.detect.outputs.should_deploy_telegram }}
+      should_deploy_line: ${{ steps.detect.outputs.should_deploy_line }}
+      telegram_changes: ${{ steps.detect.outputs.telegram_changes }}
+      line_changes: ${{ steps.detect.outputs.line_changes }}
+      common_changes: ${{ steps.detect.outputs.common_changes }}
+      
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+        
+    - name: 🕵️ 分析變更的文件
+      id: detect
+      run: |
+        echo "🕵️ 分析變更的文件..."
+        
+        # 獲取變更的文件列表
+        if [ "${{ github.event_name }}" = "push" ]; then
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+        else
+          # 手動觸發，檢查最近的提交
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+        fi
+        
+        echo "變更的文件:"
+        echo "$CHANGED_FILES"
+        
+        # 分析文件變更類型
+        telegram_files=("main.py" "telegram_main.py" "telegram_app.py" "telegram_bot_handler.py" "requirements-telegram.txt")
+        line_files=("app.py" "line_bot_handler.py" "requirements.txt" "requirements-line.txt")
+        common_files=("config.py" "name_card_processor.py" "notion_manager.py" "batch_manager.py" "multi_card_processor.py" "user_interaction_handler.py" "address_normalizer.py")
+        
+        telegram_changed=false
+        line_changed=false
+        common_changed=false
+        
+        # 檢查 Telegram 相關文件
+        for file in "${telegram_files[@]}"; do
+          if echo "$CHANGED_FILES" | grep -q "^$file$"; then
+            telegram_changed=true
+            echo "📱 Telegram 文件變更: $file"
+          fi
+        done
+        
+        # 檢查 LINE 相關文件
+        for file in "${line_files[@]}"; do
+          if echo "$CHANGED_FILES" | grep -q "^$file$"; then
+            line_changed=true
+            echo "📞 LINE 文件變更: $file"
+          fi
+        done
+        
+        # 檢查共用文件
+        for file in "${common_files[@]}"; do
+          if echo "$CHANGED_FILES" | grep -q "^$file$"; then
+            common_changed=true
+            echo "🔗 共用文件變更: $file"
+          fi
+        done
+        
+        # 決定部署策略
+        should_deploy_telegram=false
+        should_deploy_line=false
+        
+        case "${{ env.SERVICE_TYPE }}" in
+          "telegram-bot")
+            should_deploy_telegram=true
+            ;;
+          "line-bot")
+            should_deploy_line=true
+            ;;
+          "both")
+            should_deploy_telegram=true
+            should_deploy_line=true
+            ;;
+          *)
+            # 自動檢測模式
+            if [ "$telegram_changed" = true ] || [ "$common_changed" = true ]; then
+              should_deploy_telegram=true
+            fi
+            if [ "$line_changed" = true ] || [ "$common_changed" = true ]; then
+              should_deploy_line=true
+            fi
+            ;;
+        esac
+        
+        echo "should_deploy_telegram=$should_deploy_telegram" >> $GITHUB_OUTPUT
+        echo "should_deploy_line=$should_deploy_line" >> $GITHUB_OUTPUT
+        echo "telegram_changes=$telegram_changed" >> $GITHUB_OUTPUT
+        echo "line_changes=$line_changed" >> $GITHUB_OUTPUT
+        echo "common_changes=$common_changed" >> $GITHUB_OUTPUT
+        
+        echo ""
+        echo "📋 部署決策:"
+        echo "- Telegram Bot: $should_deploy_telegram"
+        echo "- LINE Bot: $should_deploy_line"
+
+  pre-deploy-checks:
+    name: 🔍 預部署檢查
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ !github.event.inputs.force_deploy }}
+    
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      
+    - name: 🐍 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 安裝依賴
+      run: |
+        pip install --upgrade pip
+        
+        # 根據部署類型安裝相應依賴
+        if [ "${{ needs.detect-changes.outputs.should_deploy_telegram }}" = "true" ]; then
+          echo "📦 安裝 Telegram Bot 依賴..."
+          pip install -r requirements-telegram.txt
+        fi
+        
+        if [ "${{ needs.detect-changes.outputs.should_deploy_line }}" = "true" ]; then
+          echo "📦 安裝 LINE Bot 依賴..."
+          pip install -r requirements.txt
+        fi
+        
+    - name: 🔍 語法和結構檢查
+      run: |
+        echo "🔍 執行語法檢查..."
+        
+        # 檢查共用核心模組
+        core_files=("config.py" "name_card_processor.py" "notion_manager.py" "batch_manager.py")
+        for file in "${core_files[@]}"; do
+          if [ -f "$file" ]; then
+            python -m py_compile "$file"
+            echo "✅ $file 語法檢查通過"
+          fi
+        done
+        
+        # 檢查 Telegram Bot 文件
+        if [ "${{ needs.detect-changes.outputs.should_deploy_telegram }}" = "true" ]; then
+          telegram_files=("main.py" "telegram_main.py" "telegram_app.py")
+          for file in "${telegram_files[@]}"; do
+            if [ -f "$file" ]; then
+              python -m py_compile "$file"
+              echo "✅ Telegram: $file 語法檢查通過"
+            fi
+          done
+        fi
+        
+        # 檢查 LINE Bot 文件
+        if [ "${{ needs.detect-changes.outputs.should_deploy_line }}" = "true" ]; then
+          line_files=("app.py" "line_bot_handler.py")
+          for file in "${line_files[@]}"; do
+            if [ -f "$file" ]; then
+              python -m py_compile "$file"
+              echo "✅ LINE: $file 語法檢查通過"
+            fi
+          done
+        fi
+        
+    - name: 📋 部署文件檢查
+      run: |
+        echo "📋 檢查部署配置文件..."
+        
+        # 檢查 zeabur.json
+        if [ -f "zeabur.json" ]; then
+          echo "✅ zeabur.json 存在"
+          python -m json.tool zeabur.json > /dev/null && echo "✅ zeabur.json 格式正確"
+        else
+          echo "⚠️ zeabur.json 不存在，將在部署時創建"
+        fi
+        
+        # 檢查依賴文件
+        if [ "${{ needs.detect-changes.outputs.should_deploy_telegram }}" = "true" ]; then
+          if [ -f "requirements-telegram.txt" ]; then
+            echo "✅ requirements-telegram.txt 存在"
+          else
+            echo "❌ requirements-telegram.txt 缺失"
+            exit 1
+          fi
+        fi
+        
+        if [ "${{ needs.detect-changes.outputs.should_deploy_line }}" = "true" ]; then
+          if [ -f "requirements.txt" ]; then
+            echo "✅ requirements.txt 存在"
+          else
+            echo "❌ requirements.txt 缺失"
+            exit 1
+          fi
+        fi
+
+  deploy-telegram-bot:
+    name: 📱 部署 Telegram Bot
+    runs-on: ubuntu-latest
+    needs: [detect-changes, pre-deploy-checks]
+    if: always() && needs.detect-changes.outputs.should_deploy_telegram == 'true' && (needs.pre-deploy-checks.result == 'success' || needs.pre-deploy-checks.result == 'skipped')
+    
+    environment: 
+      name: ${{ env.ENVIRONMENT }}
+      url: ${{ steps.deploy.outputs.telegram_url }}
+      
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      
+    - name: 🛠️ 安裝 Zeabur CLI
+      run: |
+        echo "📦 安裝 Zeabur CLI..."
+        npm install -g @zeabur/cli@latest
+        zeabur --version
+        
+    - name: 🔐 配置 Zeabur 認證
+      run: |
+        echo "🔐 配置 Zeabur 認證..."
+        echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
+        
+    - name: 📝 創建 Telegram Bot 配置
+      run: |
+        echo "📝 創建 Telegram Bot 部署配置..."
+        
+        SERVICE_NAME="namecard-telegram-bot"
+        if [ "${{ env.ENVIRONMENT }}" != "production" ]; then
+          SERVICE_NAME="namecard-telegram-bot-${{ env.ENVIRONMENT }}"
+        fi
+        
+        cat > zeabur-telegram.json << EOF
+        {
+          "name": "$SERVICE_NAME",
+          "build": {
+            "command": "pip install -r requirements-telegram.txt"
+          },
+          "start": {
+            "command": "python main.py"
+          },
+          "environment": {
+            "PORT": "5003",
+            "PYTHON_VERSION": "3.9",
+            "FLASK_ENV": "${{ env.ENVIRONMENT }}",
+            "PYTHONUNBUFFERED": "1",
+            "SERVICE_TYPE": "telegram-bot"
+          },
+          "region": "hkg",
+          "restart": "always"
+        }
+        EOF
+        
+        echo "✅ Telegram Bot 配置已創建"
+        cat zeabur-telegram.json
+        
+    - name: 🚀 部署 Telegram Bot
+      id: deploy
+      run: |
+        echo "🚀 部署 Telegram Bot 到 Zeabur..."
+        
+        # 使用 Telegram Bot 配置
+        cp zeabur-telegram.json zeabur.json
+        
+        SERVICE_NAME="namecard-telegram-bot"
+        if [ "${{ env.ENVIRONMENT }}" != "production" ]; then
+          SERVICE_NAME="namecard-telegram-bot-${{ env.ENVIRONMENT }}"
+        fi
+        
+        # 部署策略
+        case "${{ env.DEPLOY_STRATEGY }}" in
+          "create-new")
+            echo "📋 創建新服務..."
+            zeabur deploy --name="$SERVICE_NAME" --create=true
+            ;;
+          "blue-green")
+            echo "📋 藍綠部署策略..."
+            # 藍綠部署邏輯 (簡化版)
+            TEMP_SERVICE="${SERVICE_NAME}-temp"
+            zeabur deploy --name="$TEMP_SERVICE" --create=true
+            # 這裡需要額外的流量切換邏輯
+            ;;
+          *)
+            echo "📋 更新現有服務..."
+            zeabur deploy --name="$SERVICE_NAME" || {
+              echo "⚠️ 更新失敗，嘗試創建新服務..."
+              zeabur deploy --name="$SERVICE_NAME" --create=true
+            }
+            ;;
+        esac
+        
+        # 設置輸出
+        TELEGRAM_URL="https://${SERVICE_NAME}.zeabur.app"
+        echo "telegram_url=$TELEGRAM_URL" >> $GITHUB_OUTPUT
+        echo "✅ Telegram Bot 部署完成: $TELEGRAM_URL"
+        
+    - name: 🔧 設置 Telegram Bot 環境變數
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        GOOGLE_API_KEY_FALLBACK: ${{ secrets.GOOGLE_API_KEY_FALLBACK }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+      run: |
+        echo "🔧 設置 Telegram Bot 環境變數..."
+        
+        SERVICE_NAME="namecard-telegram-bot"
+        if [ "${{ env.ENVIRONMENT }}" != "production" ]; then
+          SERVICE_NAME="namecard-telegram-bot-${{ env.ENVIRONMENT }}"
+        fi
+        
+        # 批量設置環境變數
+        env_vars=(
+          "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN"
+          "GOOGLE_API_KEY=$GOOGLE_API_KEY"
+          "GOOGLE_API_KEY_FALLBACK=$GOOGLE_API_KEY_FALLBACK"
+          "NOTION_API_KEY=$NOTION_API_KEY"
+          "NOTION_DATABASE_ID=$NOTION_DATABASE_ID"
+          "PORT=5003"
+          "FLASK_ENV=${{ env.ENVIRONMENT }}"
+          "PYTHONUNBUFFERED=1"
+        )
+        
+        for env_var in "${env_vars[@]}"; do
+          key=$(echo "$env_var" | cut -d'=' -f1)
+          value=$(echo "$env_var" | cut -d'=' -f2-)
+          
+          if [ -n "$value" ] && [ "$value" != "" ]; then
+            if zeabur variable create --name="$SERVICE_NAME" -k "$key=$value" -y; then
+              echo "✅ $key 設置成功"
+            else
+              echo "⚠️ $key 設置失敗"
+            fi
+          fi
+        done
+        
+    - name: 🏥 Telegram Bot 健康檢查
+      run: |
+        echo "🏥 執行 Telegram Bot 健康檢查..."
+        
+        TELEGRAM_URL="${{ steps.deploy.outputs.telegram_url }}"
+        
+        # 等待服務啟動
+        echo "⏳ 等待 Telegram Bot 啟動..."
+        sleep 45
+        
+        # 健康檢查
+        for i in {1..6}; do
+          echo "🔍 健康檢查嘗試 $i/6..."
+          
+          if curl -f -s "$TELEGRAM_URL/health" > /dev/null; then
+            echo "✅ Telegram Bot 健康檢查通過"
+            
+            # 測試 webhook 端點
+            if curl -f -s "$TELEGRAM_URL/telegram-webhook" > /dev/null 2>&1; then
+              echo "✅ Telegram webhook 端點可用"
+            else
+              echo "⚠️ Telegram webhook 端點測試失敗 (可能需要 POST)"
+            fi
+            
+            break
+          fi
+          
+          if [ $i -eq 6 ]; then
+            echo "❌ Telegram Bot 健康檢查最終失敗"
+            exit 1
+          fi
+          
+          echo "⏳ 等待 15 秒後重試..."
+          sleep 15
+        done
+
+  deploy-line-bot:
+    name: 📞 部署 LINE Bot
+    runs-on: ubuntu-latest
+    needs: [detect-changes, pre-deploy-checks]
+    if: always() && needs.detect-changes.outputs.should_deploy_line == 'true' && (needs.pre-deploy-checks.result == 'success' || needs.pre-deploy-checks.result == 'skipped')
+    
+    environment: 
+      name: ${{ env.ENVIRONMENT }}-line
+      url: ${{ steps.deploy.outputs.line_url }}
+      
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      
+    - name: 🛠️ 安裝 Zeabur CLI
+      run: |
+        echo "📦 安裝 Zeabur CLI..."
+        npm install -g @zeabur/cli@latest
+        zeabur --version
+        
+    - name: 🔐 配置 Zeabur 認證
+      run: |
+        echo "🔐 配置 Zeabur 認證..."
+        echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
+        
+    - name: 📝 創建 LINE Bot 配置
+      run: |
+        echo "📝 創建 LINE Bot 部署配置..."
+        
+        SERVICE_NAME="namecard-line-bot"
+        if [ "${{ env.ENVIRONMENT }}" != "production" ]; then
+          SERVICE_NAME="namecard-line-bot-${{ env.ENVIRONMENT }}"
+        fi
+        
+        cat > zeabur-line.json << EOF
+        {
+          "name": "$SERVICE_NAME",
+          "build": {
+            "command": "pip install -r requirements.txt"
+          },
+          "start": {
+            "command": "python app.py"
+          },
+          "environment": {
+            "PORT": "5002",
+            "PYTHON_VERSION": "3.9",
+            "FLASK_ENV": "${{ env.ENVIRONMENT }}",
+            "PYTHONUNBUFFERED": "1",
+            "SERVICE_TYPE": "line-bot"
+          },
+          "region": "hkg",
+          "restart": "always"
+        }
+        EOF
+        
+        echo "✅ LINE Bot 配置已創建"
+        cat zeabur-line.json
+        
+    - name: 🚀 部署 LINE Bot
+      id: deploy
+      run: |
+        echo "🚀 部署 LINE Bot 到 Zeabur..."
+        
+        # 使用 LINE Bot 配置
+        cp zeabur-line.json zeabur.json
+        
+        SERVICE_NAME="namecard-line-bot"
+        if [ "${{ env.ENVIRONMENT }}" != "production" ]; then
+          SERVICE_NAME="namecard-line-bot-${{ env.ENVIRONMENT }}"
+        fi
+        
+        # 部署
+        zeabur deploy --name="$SERVICE_NAME" || {
+          echo "⚠️ 更新失敗，嘗試創建新服務..."
+          zeabur deploy --name="$SERVICE_NAME" --create=true
+        }
+        
+        # 設置輸出
+        LINE_URL="https://${SERVICE_NAME}.zeabur.app"
+        echo "line_url=$LINE_URL" >> $GITHUB_OUTPUT
+        echo "✅ LINE Bot 部署完成: $LINE_URL"
+        
+    - name: 🔧 設置 LINE Bot 環境變數
+      env:
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        GOOGLE_API_KEY_FALLBACK: ${{ secrets.GOOGLE_API_KEY_FALLBACK }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+      run: |
+        echo "🔧 設置 LINE Bot 環境變數..."
+        
+        SERVICE_NAME="namecard-line-bot"
+        if [ "${{ env.ENVIRONMENT }}" != "production" ]; then
+          SERVICE_NAME="namecard-line-bot-${{ env.ENVIRONMENT }}"
+        fi
+        
+        # 批量設置環境變數
+        env_vars=(
+          "LINE_CHANNEL_ACCESS_TOKEN=$LINE_CHANNEL_ACCESS_TOKEN"
+          "LINE_CHANNEL_SECRET=$LINE_CHANNEL_SECRET"
+          "GOOGLE_API_KEY=$GOOGLE_API_KEY"
+          "GOOGLE_API_KEY_FALLBACK=$GOOGLE_API_KEY_FALLBACK"
+          "NOTION_API_KEY=$NOTION_API_KEY"
+          "NOTION_DATABASE_ID=$NOTION_DATABASE_ID"
+          "PORT=5002"
+          "FLASK_ENV=${{ env.ENVIRONMENT }}"
+          "PYTHONUNBUFFERED=1"
+        )
+        
+        for env_var in "${env_vars[@]}"; do
+          key=$(echo "$env_var" | cut -d'=' -f1)
+          value=$(echo "$env_var" | cut -d'=' -f2-)
+          
+          if [ -n "$value" ] && [ "$value" != "" ]; then
+            if zeabur variable create --name="$SERVICE_NAME" -k "$key=$value" -y; then
+              echo "✅ $key 設置成功"
+            else
+              echo "⚠️ $key 設置失敗"
+            fi
+          fi
+        done
+        
+    - name: 🏥 LINE Bot 健康檢查
+      run: |
+        echo "🏥 執行 LINE Bot 健康檢查..."
+        
+        LINE_URL="${{ steps.deploy.outputs.line_url }}"
+        
+        # 等待服務啟動
+        echo "⏳ 等待 LINE Bot 啟動..."
+        sleep 45
+        
+        # 健康檢查
+        for i in {1..6}; do
+          echo "🔍 健康檢查嘗試 $i/6..."
+          
+          if curl -f -s "$LINE_URL/health" > /dev/null; then
+            echo "✅ LINE Bot 健康檢查通過"
+            
+            # 測試 webhook 端點
+            if curl -f -s "$LINE_URL/callback" > /dev/null 2>&1; then
+              echo "✅ LINE webhook 端點可用"
+            else
+              echo "⚠️ LINE webhook 端點測試失敗 (可能需要 POST)"
+            fi
+            
+            break
+          fi
+          
+          if [ $i -eq 6 ]; then
+            echo "❌ LINE Bot 健康檢查最終失敗"
+            exit 1
+          fi
+          
+          echo "⏳ 等待 15 秒後重試..."
+          sleep 15
+        done
+
+  post-deploy-validation:
+    name: 🧪 部署後驗證
+    runs-on: ubuntu-latest
+    needs: [detect-changes, deploy-telegram-bot, deploy-line-bot]
+    if: always() && (needs.deploy-telegram-bot.result == 'success' || needs.deploy-line-bot.result == 'success')
+    
+    steps:
+    - name: 🧪 綜合功能測試
+      run: |
+        echo "🧪 執行部署後綜合驗證..."
+        
+        # Telegram Bot 驗證
+        if [ "${{ needs.deploy-telegram-bot.result }}" = "success" ]; then
+          TELEGRAM_URL="${{ needs.deploy-telegram-bot.outputs.telegram_url }}"
+          echo "📱 測試 Telegram Bot: $TELEGRAM_URL"
+          
+          # 測試主要端點
+          endpoints=("/health" "/test" "/telegram-webhook")
+          for endpoint in "${endpoints[@]}"; do
+            if curl -f -s "$TELEGRAM_URL$endpoint" > /dev/null 2>&1; then
+              echo "✅ Telegram$endpoint 端點正常"
+            else
+              echo "⚠️ Telegram$endpoint 端點異常"
+            fi
+          done
+        fi
+        
+        # LINE Bot 驗證
+        if [ "${{ needs.deploy-line-bot.result }}" = "success" ]; then
+          LINE_URL="${{ needs.deploy-line-bot.outputs.line_url }}"
+          echo "📞 測試 LINE Bot: $LINE_URL"
+          
+          # 測試主要端點
+          endpoints=("/health" "/test" "/callback")
+          for endpoint in "${endpoints[@]}"; do
+            if curl -f -s "$LINE_URL$endpoint" > /dev/null 2>&1; then
+              echo "✅ LINE$endpoint 端點正常"
+            else
+              echo "⚠️ LINE$endpoint 端點異常"
+            fi
+          done
+        fi
+        
+        echo "✅ 部署後驗證完成"
+
+  notify-completion:
+    name: 📢 部署完成通知
+    runs-on: ubuntu-latest
+    needs: [detect-changes, deploy-telegram-bot, deploy-line-bot, post-deploy-validation]
+    if: always()
+    
+    steps:
+    - name: 📊 生成部署報告
+      run: |
+        echo "📊 **統一部署流程完成報告**"
+        echo ""
+        
+        # 部署狀態總結
+        TELEGRAM_STATUS="${{ needs.deploy-telegram-bot.result }}"
+        LINE_STATUS="${{ needs.deploy-line-bot.result }}"
+        VALIDATION_STATUS="${{ needs.post-deploy-validation.result }}"
+        
+        echo "🎯 **部署目標:**"
+        echo "- 服務類型: ${{ env.SERVICE_TYPE }}"
+        echo "- 部署環境: ${{ env.ENVIRONMENT }}"
+        echo "- 部署策略: ${{ env.DEPLOY_STRATEGY }}"
+        echo ""
+        
+        echo "📋 **部署結果:**"
+        
+        if [ "${{ needs.detect-changes.outputs.should_deploy_telegram }}" = "true" ]; then
+          if [ "$TELEGRAM_STATUS" = "success" ]; then
+            echo "✅ Telegram Bot: 部署成功"
+            echo "   📱 URL: ${{ needs.deploy-telegram-bot.outputs.telegram_url }}"
+          else
+            echo "❌ Telegram Bot: 部署失敗"
+          fi
+        else
+          echo "⏭️ Telegram Bot: 跳過部署"
+        fi
+        
+        if [ "${{ needs.detect-changes.outputs.should_deploy_line }}" = "true" ]; then
+          if [ "$LINE_STATUS" = "success" ]; then
+            echo "✅ LINE Bot: 部署成功"
+            echo "   📞 URL: ${{ needs.deploy-line-bot.outputs.line_url }}"
+          else
+            echo "❌ LINE Bot: 部署失敗"
+          fi
+        else
+          echo "⏭️ LINE Bot: 跳過部署"
+        fi
+        
+        if [ "$VALIDATION_STATUS" = "success" ]; then
+          echo "✅ 部署後驗證: 通過"
+        elif [ "$VALIDATION_STATUS" = "failure" ]; then
+          echo "⚠️ 部署後驗證: 失敗"
+        else
+          echo "⏭️ 部署後驗證: 跳過"
+        fi
+        
+        echo ""
+        echo "📋 **後續步驟:**"
+        
+        if [ "${{ needs.deploy-telegram-bot.result }}" = "success" ]; then
+          echo "📱 **Telegram Bot:**"
+          echo "1. 設置 Webhook URL: ${{ needs.deploy-telegram-bot.outputs.telegram_url }}/telegram-webhook"
+          echo "2. 測試 Bot 功能"
+          echo ""
+        fi
+        
+        if [ "${{ needs.deploy-line-bot.result }}" = "success" ]; then
+          echo "📞 **LINE Bot:**"
+          echo "1. 更新 LINE Developers Console Webhook URL"
+          echo "2. 設置為: ${{ needs.deploy-line-bot.outputs.line_url }}/callback"
+          echo "3. 測試 LINE Bot 功能"
+          echo ""
+        fi
+        
+        echo "🔗 **相關連結:**"
+        echo "- [Zeabur Dashboard](https://dash.zeabur.com/)"
+        echo "- [查看部署日誌](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        
+        if [ "${{ needs.deploy-telegram-bot.result }}" = "success" ]; then
+          echo "- [Telegram Bot API](https://core.telegram.org/bots/api)"
+        fi
+        
+        if [ "${{ needs.deploy-line-bot.result }}" = "success" ]; then
+          echo "- [LINE Developers Console](https://developers.line.biz/console/)"
+        fi

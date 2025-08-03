@@ -1,0 +1,396 @@
+name: 🚀 開發分支快速部署
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: '要部署的分支名稱'
+        required: true
+        default: 'dev-deploy'
+        type: string
+      environment:
+        description: '部署環境'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - development
+      auto_commit:
+        description: '自動提交未 commit 的變更'
+        required: false
+        default: true
+        type: boolean
+      cleanup_branch:
+        description: '部署後清理臨時分支'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  BRANCH_NAME: ${{ github.event.inputs.branch_name }}
+  TARGET_ENV: ${{ github.event.inputs.environment }}
+
+jobs:
+  prepare-deploy:
+    name: 📋 準備部署環境
+    runs-on: ubuntu-latest
+    
+    outputs:
+      deploy_branch: ${{ steps.branch-prep.outputs.deploy_branch }}
+      has_changes: ${{ steps.check-changes.outputs.has_changes }}
+      
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 📊 檢查未 commit 變更
+      id: check-changes
+      run: |
+        echo "檢查工作目錄狀態..."
+        git status --porcelain
+        
+        if [[ -n $(git status --porcelain) ]]; then
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "⚠️ 發現未 commit 的變更"
+          git status --porcelain
+        else
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+          echo "✅ 工作目錄乾淨"
+        fi
+        
+    - name: 🌿 準備部署分支
+      id: branch-prep
+      run: |
+        DEPLOY_BRANCH="${BRANCH_NAME:-dev-deploy-$(date +%Y%m%d-%H%M%S)}"
+        echo "deploy_branch=$DEPLOY_BRANCH" >> $GITHUB_OUTPUT
+        
+        echo "📋 部署分支配置:"
+        echo "- 分支名稱: $DEPLOY_BRANCH"
+        echo "- 目標環境: $TARGET_ENV"
+        echo "- 自動提交: ${{ github.event.inputs.auto_commit }}"
+        
+        # 檢查分支是否已存在
+        if git show-ref --verify --quiet refs/heads/$DEPLOY_BRANCH; then
+          echo "⚠️ 分支 $DEPLOY_BRANCH 已存在，將使用現有分支"
+        else
+          echo "✅ 將創建新分支 $DEPLOY_BRANCH"
+        fi
+
+  create-deploy-branch:
+    name: 🌿 創建部署分支
+    runs-on: ubuntu-latest
+    needs: prepare-deploy
+    if: github.event.inputs.auto_commit == 'true' && needs.prepare-deploy.outputs.has_changes == 'true'
+    
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: ⚙️ Git 配置
+      run: |
+        git config --global user.email "action@github.com"
+        git config --global user.name "GitHub Action Deploy Bot"
+        
+    - name: 🌿 創建並切換到部署分支
+      run: |
+        DEPLOY_BRANCH="${{ needs.prepare-deploy.outputs.deploy_branch }}"
+        
+        # 創建新分支 (如果不存在)
+        if ! git show-ref --verify --quiet refs/heads/$DEPLOY_BRANCH; then
+          git checkout -b $DEPLOY_BRANCH
+          echo "✅ 創建新分支: $DEPLOY_BRANCH"
+        else
+          git checkout $DEPLOY_BRANCH
+          echo "✅ 切換到現有分支: $DEPLOY_BRANCH"
+        fi
+        
+    - name: 📦 提交未 commit 的變更
+      run: |
+        # 添加所有變更
+        git add .
+        
+        # 檢查是否有需要提交的變更
+        if git diff --staged --quiet; then
+          echo "✅ 沒有變更需要提交"
+        else
+          echo "📦 提交變更到部署分支..."
+          
+          git commit -m "deploy: 自動提交未 commit 變更用於部署
+
+📋 部署信息:
+- 目標環境: ${{ env.TARGET_ENV }}
+- 部署時間: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+- 觸發者: ${{ github.actor }}
+- 工作流: ${{ github.workflow }}
+
+🤖 此提交由 GitHub Actions 自動創建
+用於快速部署未提交的開發代碼到測試環境
+
+Co-Authored-By: GitHub Actions Deploy Bot <action@github.com>"
+
+          echo "✅ 變更已提交到分支: ${{ needs.prepare-deploy.outputs.deploy_branch }}"
+        fi
+        
+    - name: 🚀 推送部署分支
+      run: |
+        DEPLOY_BRANCH="${{ needs.prepare-deploy.outputs.deploy_branch }}"
+        
+        echo "🚀 推送分支到遠端..."
+        git push origin $DEPLOY_BRANCH
+        
+        echo "✅ 部署分支已推送: $DEPLOY_BRANCH"
+
+  deploy-to-zeabur:
+    name: 🚀 部署到 Zeabur
+    runs-on: ubuntu-latest
+    needs: [prepare-deploy, create-deploy-branch]
+    if: always() && needs.prepare-deploy.result == 'success'
+    
+    environment: 
+      name: ${{ github.event.inputs.environment || 'staging' }}
+      
+    steps:
+    - name: 🔄 檢出部署分支
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare-deploy.outputs.deploy_branch }}
+        fetch-depth: 0
+        
+    - name: 🐍 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 安裝依賴
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements-telegram.txt
+        
+    - name: 🔍 預部署檢查
+      run: |
+        echo "🔍 執行預部署檢查..."
+        
+        # 語法檢查
+        python -m py_compile main.py
+        python -m py_compile telegram_app.py
+        python -m py_compile config.py
+        echo "✅ 語法檢查通過"
+        
+        # 檢查必要文件
+        required_files=("main.py" "telegram_app.py" "requirements-telegram.txt" "zeabur.json")
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✅ $file 存在"
+          else
+            echo "❌ $file 缺失"
+            exit 1
+          fi
+        done
+        
+    - name: 🛠️ 安裝 Zeabur CLI
+      run: |
+        echo "📦 安裝 Zeabur CLI..."
+        npm install -g @zeabur/cli@latest
+        zeabur --version
+        
+    - name: 🔐 配置 Zeabur 認證
+      run: |
+        echo "🔐 配置 Zeabur 認證..."
+        echo "${{ secrets.ZEABUR_TOKEN }}" | zeabur auth login --token
+        
+    - name: 📝 創建開發環境配置
+      run: |
+        echo "📝 創建開發環境部署配置..."
+        
+        # 為開發環境創建特殊配置
+        ENV_SUFFIX=""
+        if [ "${{ env.TARGET_ENV }}" = "staging" ]; then
+          ENV_SUFFIX="-staging"
+        elif [ "${{ env.TARGET_ENV }}" = "development" ]; then
+          ENV_SUFFIX="-dev"
+        fi
+        
+        cat > zeabur-dev.json << EOF
+        {
+          "name": "namecard-telegram-bot${ENV_SUFFIX}",
+          "build": {
+            "command": "pip install -r requirements-telegram.txt"
+          },
+          "start": {
+            "command": "python main.py"
+          },
+          "environment": {
+            "PORT": "5003",
+            "PYTHON_VERSION": "3.9",
+            "FLASK_ENV": "${{ env.TARGET_ENV }}",
+            "PYTHONUNBUFFERED": "1",
+            "SERVICE_TYPE": "telegram-bot",
+            "DEPLOY_BRANCH": "${{ needs.prepare-deploy.outputs.deploy_branch }}",
+            "DEPLOY_TIME": "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          }
+        }
+        EOF
+        
+        echo "✅ 開發環境配置已創建"
+        cat zeabur-dev.json
+        
+    - name: 🚀 部署到開發環境
+      run: |
+        echo "🚀 部署到開發環境..."
+        
+        # 使用開發環境配置部署
+        cp zeabur-dev.json zeabur.json
+        
+        # 部署
+        zeabur deploy --name="namecard-telegram-bot-${{ env.TARGET_ENV }}" || {
+          echo "⚠️ 直接部署失敗，嘗試創建新服務..."
+          zeabur deploy --create=true --name="namecard-telegram-bot-${{ env.TARGET_ENV }}"
+        }
+        
+        echo "✅ 部署完成"
+        
+    - name: 🔧 設置環境變數
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        GOOGLE_API_KEY_FALLBACK: ${{ secrets.GOOGLE_API_KEY_FALLBACK }}
+        NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+      run: |
+        echo "🔧 設置開發環境變數..."
+        
+        SERVICE_NAME="namecard-telegram-bot-${{ env.TARGET_ENV }}"
+        
+        # 設置所有環境變數
+        env_vars=(
+          "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN"
+          "GOOGLE_API_KEY=$GOOGLE_API_KEY"
+          "GOOGLE_API_KEY_FALLBACK=$GOOGLE_API_KEY_FALLBACK"
+          "NOTION_API_KEY=$NOTION_API_KEY"
+          "NOTION_DATABASE_ID=$NOTION_DATABASE_ID"
+          "PORT=5003"
+          "FLASK_ENV=${{ env.TARGET_ENV }}"
+          "PYTHONUNBUFFERED=1"
+        )
+        
+        for env_var in "${env_vars[@]}"; do
+          key=$(echo "$env_var" | cut -d'=' -f1)
+          value=$(echo "$env_var" | cut -d'=' -f2-)
+          
+          if [ -n "$value" ]; then
+            zeabur variable create --name="$SERVICE_NAME" -k "$key=$value" -y || {
+              echo "⚠️ 設置 $key 失敗，但繼續執行"
+            }
+          fi
+        done
+        
+        echo "✅ 環境變數設置完成"
+        
+    - name: 🏥 健康檢查
+      run: |
+        echo "🏥 執行健康檢查..."
+        
+        # 等待服務啟動
+        sleep 30
+        
+        # 嘗試獲取服務 URL
+        SERVICE_URL=$(zeabur service list | grep -o 'https://[^[:space:]]*' | head -1 || echo "")
+        
+        if [ -n "$SERVICE_URL" ]; then
+          echo "🌐 服務 URL: $SERVICE_URL"
+          
+          # 健康檢查
+          for i in {1..5}; do
+            if curl -f -s "$SERVICE_URL/health" > /dev/null; then
+              echo "✅ 健康檢查通過"
+              break
+            fi
+            echo "⏳ 等待服務啟動... ($i/5)"
+            sleep 10
+          done
+        else
+          echo "⚠️ 無法獲取服務 URL，請手動檢查部署狀態"
+        fi
+
+  cleanup:
+    name: 🧹 清理臨時分支
+    runs-on: ubuntu-latest
+    needs: [prepare-deploy, deploy-to-zeabur]
+    if: always() && github.event.inputs.cleanup_branch == 'true' && needs.prepare-deploy.outputs.deploy_branch != 'main'
+    
+    steps:
+    - name: 🔄 檢出代碼
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 🗑️ 清理部署分支
+      run: |
+        DEPLOY_BRANCH="${{ needs.prepare-deploy.outputs.deploy_branch }}"
+        
+        if [ "$DEPLOY_BRANCH" != "main" ] && [ "$DEPLOY_BRANCH" != "develop" ]; then
+          echo "🗑️ 清理臨時部署分支: $DEPLOY_BRANCH"
+          
+          # 刪除本地分支
+          git branch -D $DEPLOY_BRANCH 2>/dev/null || echo "本地分支不存在"
+          
+          # 刪除遠端分支
+          git push origin --delete $DEPLOY_BRANCH 2>/dev/null || echo "遠端分支不存在"
+          
+          echo "✅ 臨時分支清理完成"
+        else
+          echo "⚠️ 跳過清理主要分支: $DEPLOY_BRANCH"
+        fi
+
+  notify-completion:
+    name: 📢 部署完成通知
+    runs-on: ubuntu-latest
+    needs: [prepare-deploy, deploy-to-zeabur, cleanup]
+    if: always()
+    
+    steps:
+    - name: 📊 部署結果報告
+      run: |
+        echo "📊 **開發分支部署結果報告**"
+        echo ""
+        
+        DEPLOY_STATUS="${{ needs.deploy-to-zeabur.result }}"
+        CLEANUP_STATUS="${{ needs.cleanup.result }}"
+        
+        if [ "$DEPLOY_STATUS" = "success" ]; then
+          echo "🎉 **部署成功!**"
+          echo "✅ 開發分支已成功部署到 ${{ env.TARGET_ENV }} 環境"
+        else
+          echo "❌ **部署失敗**"
+          echo "請檢查部署日誌排查問題"
+        fi
+        
+        echo ""
+        echo "📋 **部署詳情:**"
+        echo "- 🌿 部署分支: ${{ needs.prepare-deploy.outputs.deploy_branch }}"
+        echo "- 🏷️ 目標環境: ${{ env.TARGET_ENV }}"
+        echo "- 👤 觸發者: ${{ github.actor }}"
+        echo "- 📅 部署時間: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        
+        if [ "${{ github.event.inputs.cleanup_branch }}" = "true" ]; then
+          if [ "$CLEANUP_STATUS" = "success" ]; then
+            echo "- 🧹 臨時分支: 已清理"
+          else
+            echo "- 🧹 臨時分支: 清理失敗或跳過"
+          fi
+        else
+          echo "- 🧹 臨時分支: 保留 (${{ needs.prepare-deploy.outputs.deploy_branch }})"
+        fi
+        
+        echo ""
+        echo "🔗 **相關連結:**"
+        echo "- [Zeabur Dashboard](https://dash.zeabur.com/)"
+        echo "- [查看部署日誌](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
