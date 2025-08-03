@@ -4,7 +4,7 @@
     "command": "pip install -r deployment/environments/production/requirements-telegram.txt"
   },
   "start": {
-    "command": "python debug_main.py"
+    "command": "python main.py"
   },
   "port": 5003,
   "environment": {
