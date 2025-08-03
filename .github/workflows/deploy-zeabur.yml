@@ -177,8 +177,8 @@ jobs:
       run: |
         echo "🚀 開始部署到 Zeabur (更新現有服務)..."
         
-        # 使用現有的專案和服務名稱
-        PROJECT_NAME="namecard"
+        # 使用現有的專案和服務名稱（從日誌中確認的實際名稱）
+        PROJECT_NAME="namecard-bot"
         SERVICE_NAME="namecard-app"
         
         echo "📋 目標配置:"
@@ -203,7 +203,9 @@ jobs:
         echo "🔧 更新現有服務到 Telegram Bot..."
         echo "📋 使用 zeabur deploy 命令部署..."
         
+        # 使用非互動模式部署，指定專案 ID
         DEPLOY_OUTPUT=$($HOME/.zeabur/bin/zeabur deploy \
+          --project="68885a362fbe6dd524f69c9c" \
           --name="$SERVICE_NAME" \
           --create=false 2>&1)
         
@@ -234,7 +236,7 @@ jobs:
       run: |
         echo "🔧 設置 Zeabur 環境變數..."
         
-        PROJECT_NAME="namecard"
+        PROJECT_NAME="namecard-bot"
         SERVICE_NAME="namecard-app"
         
         # 設置所有必要的環境變數
@@ -257,6 +259,7 @@ jobs:
           if [ -n "$value" ] && [ "$value" != "" ]; then
             echo "🔑 設置環境變數: $key"
             if $HOME/.zeabur/bin/zeabur variable create \
+              --project="68885a362fbe6dd524f69c9c" \
               --name="$SERVICE_NAME" \
               -k "$key=$value" \
               -y; then
