@@ -36,7 +36,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
         
@@ -48,7 +48,7 @@ jobs:
     - name: 安裝 Python 依賴
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r deployment/environments/production/requirements.txt
         pip install -r requirements-test.txt
         
     - name: 自動代碼格式化 🔧
@@ -227,7 +227,7 @@ jobs:
     - name: 依賴安全檢查 - safety
       run: |
         echo "🛡️ 檢查依賴套件安全性..."
-        pip install -r requirements.txt
+        pip install -r deployment/environments/production/requirements.txt
         safety check --json || {
           echo "⚠️ 依賴套件可能有安全風險，請檢查"
           echo "💡 在生產環境中應該更嚴格處理此問題"
@@ -246,9 +246,9 @@ jobs:
       run: |
         echo "📋 檢查部署相關文件..."
         
-        if [ -f "requirements.txt" ]; then
+        if [ -f "deployment/environments/production/requirements.txt" ]; then
           echo "✅ requirements.txt 存在"
-          echo "📦 依賴套件數量: $(wc -l < requirements.txt)"
+          echo "📦 依賴套件數量: $(wc -l < deployment/environments/production/requirements.txt)"
         fi
         
         if [ -f "Procfile" ]; then
