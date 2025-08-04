@@ -49,8 +49,9 @@ class TelegramBotHandler:
         self.max_retries = 3
         self.base_retry_delay = 1
         
-        # 並發控制（最多同時 5 個請求）
-        self._semaphore = asyncio.Semaphore(5)
+        # 並發控制（最多同時 5 個請求）- 延遲初始化
+        self._semaphore = None
+        self._semaphore_lock = None
         
     def _setup_optimized_bot(self):
         """設置優化的 Bot 配置"""
@@ -68,6 +69,28 @@ class TelegramBotHandler:
         except Exception as e:
             self.logger.error(f"Bot 初始化失敗: {e}")
             raise
+
+    async def _get_semaphore(self):
+        """安全獲取 Semaphore，確保在正確的事件循環中創建"""
+        try:
+            # 獲取當前事件循環
+            current_loop = asyncio.get_running_loop()
+            
+            # 如果 semaphore 不存在或綁定到不同的事件循環，重新創建
+            if (self._semaphore is None or 
+                hasattr(self._semaphore, '_loop') and 
+                self._semaphore._loop != current_loop):
+                
+                self.logger.debug("創建新的 Semaphore 用於當前事件循環")
+                self._semaphore = asyncio.Semaphore(5)
+                
+            return self._semaphore
+            
+        except RuntimeError:
+            # 沒有運行中的事件循環，創建一個新的 Semaphore
+            self.logger.debug("沒有運行中的事件循環，創建新的 Semaphore")
+            self._semaphore = asyncio.Semaphore(5)
+            return self._semaphore
 
     def _log_error(self, error_type: str, error: Exception, context: str = ""):
         """記錄錯誤並更新統計"""
@@ -142,7 +165,9 @@ class TelegramBotHandler:
     ) -> Dict[str, Any]:
         """安全發送訊息，包含錯誤處理和重試機制"""
 
-        async with self._semaphore:  # 🔧 並發控制
+        # 🔧 安全獲取 Semaphore，確保在正確的事件循環中
+        semaphore = await self._get_semaphore()
+        async with semaphore:
             for attempt in range(max_retries + 1):
                 try:
                     message = await self.bot.send_message(
@@ -188,7 +213,9 @@ class TelegramBotHandler:
     async def safe_get_file(self, file_id: str, max_retries: int = 3) -> Dict[str, Any]:
         """安全獲取文件，包含錯誤處理"""
 
-        async with self._semaphore:  # 🔧 並發控制
+        # 🔧 安全獲取 Semaphore，確保在正確的事件循環中
+        semaphore = await self._get_semaphore()
+        async with semaphore:
             for attempt in range(max_retries + 1):
                 try:
                     file_obj = await self.bot.get_file(file_id)
