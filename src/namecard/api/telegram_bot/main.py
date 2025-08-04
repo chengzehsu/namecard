@@ -118,11 +118,38 @@ if config_valid:
         import traceback
         log_message(f"錯誤詳情: {traceback.format_exc()}", "ERROR")
         log_message("⚠️ 將以錯誤模式運行", "WARNING")
+        
+        # 🔧 關鍵修復：確保即使初始化失敗，也有基本的處理器
+        telegram_bot_handler = None
+        processors_valid = False
 else:
     log_message("⚠️ 配置無效，跳過處理器初始化", "WARNING")
 
 
 # === Telegram Bot 處理器設置函數 ===
+
+async def safe_telegram_send(chat_id: int, message: str) -> bool:
+    """安全發送 Telegram 訊息的助手函數"""
+    if telegram_bot_handler is None:
+        log_message("❌ TelegramBotHandler 未初始化，嘗試直接 API 調用", "WARNING")
+        try:
+            import requests
+            response = requests.post(
+                f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": chat_id, "text": message},
+                timeout=10
+            )
+            return response.status_code == 200
+        except Exception as e:
+            log_message(f"❌ 直接 API 調用失敗: {e}", "ERROR")
+            return False
+    
+    try:
+        result = await telegram_bot_handler.safe_send_message(chat_id, message)
+        return result.get("success", False)
+    except Exception as e:
+        log_message(f"❌ 發送訊息失敗: {e}", "ERROR")
+        return False
 
 def setup_telegram_handlers():
     """設置 Telegram Bot 處理器"""
@@ -363,6 +390,11 @@ async def handle_photo_message(
                 "🤖 使用 Google Gemini AI + 多名片檢測"
             )
 
+        # 🔧 關鍵修復：使用安全發送函數
+        if telegram_bot_handler is None:
+            await safe_telegram_send(chat_id, "❌ 系統初始化錯誤，請聯繫管理員")
+            return
+
         # 立即發送處理開始訊息
         processing_msg_result = await telegram_bot_handler.safe_send_message(chat_id, processing_message)
         processing_msg_id = processing_msg_result.get("message_id") if processing_msg_result.get("success") else None
@@ -564,7 +596,11 @@ async def handle_photo_message(
             progress_msg = batch_manager.get_batch_progress_message(user_id)
             error_msg += f"\n\n{progress_msg}"
 
-        await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+        # 🔧 安全發送錯誤訊息
+        if telegram_bot_handler:
+            await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+        else:
+            await safe_telegram_send(chat_id, error_msg)
 
 
 # === 輔助函數 ===

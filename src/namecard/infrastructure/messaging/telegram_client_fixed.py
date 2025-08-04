@@ -30,11 +30,9 @@ class TelegramBotHandler:
 
     def __init__(self):
         """初始化 Telegram Bot API 處理器"""
-        # 先初始化 logger
-        self.logger = logging.getLogger(__name__)
-        
         # 配置優化的 HTTP 客戶端
         self._setup_optimized_bot()
+        self.logger = logging.getLogger(__name__)
 
         # 錯誤統計
         self.error_stats = {
@@ -54,20 +52,29 @@ class TelegramBotHandler:
         
     def _setup_optimized_bot(self):
         """設置優化的 Bot 配置"""
-        try:
-            # 🔧 簡化配置，避免初始化問題
-            # 使用標準 Bot 配置，但添加基本的錯誤處理
-            if not Config.TELEGRAM_BOT_TOKEN:
-                raise ValueError("TELEGRAM_BOT_TOKEN 未設置")
-                
-            self.bot = Bot(token=Config.TELEGRAM_BOT_TOKEN)
-            
-            # 初始化 httpx 客戶端（備用，暫時不使用）
-            self._http_client = None
-            
-        except Exception as e:
-            self.logger.error(f"Bot 初始化失敗: {e}")
-            raise
+        # 配置 httpx 客戶端 with larger connection pool
+        limits = httpx.Limits(
+            max_keepalive_connections=20,  # 增加保持連接數
+            max_connections=50,            # 增加總連接數
+            keepalive_expiry=30.0          # 連接保持時間
+        )
+        
+        timeout = httpx.Timeout(
+            connect=10.0,     # 連接超時
+            read=30.0,        # 讀取超時  
+            write=10.0,       # 寫入超時
+            pool=5.0          # 連接池獲取超時
+        )
+        
+        # 創建自定義 httpx 客戶端
+        self._http_client = httpx.AsyncClient(
+            limits=limits,
+            timeout=timeout,
+            http2=True  # 啟用 HTTP/2
+        )
+        
+        # 使用標準 Bot（如果 ExtBot 有問題，回退到標準 Bot）
+        self.bot = Bot(token=Config.TELEGRAM_BOT_TOKEN)
 
     def _log_error(self, error_type: str, error: Exception, context: str = ""):
         """記錄錯誤並更新統計"""
