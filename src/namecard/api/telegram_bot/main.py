@@ -54,54 +54,84 @@ def log_message(message, level="INFO"):
 
 
 # 驗證配置
+config_valid = False
 try:
     # 檢查 Telegram Bot Token
     if not Config.TELEGRAM_BOT_TOKEN or Config.TELEGRAM_BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
         log_message("❌ TELEGRAM_BOT_TOKEN 未設置", "ERROR")
         log_message("💡 請在 Zeabur Dashboard 設置 TELEGRAM_BOT_TOKEN", "INFO")
-        exit(1)
-    
-    if not Config.validate():
+        log_message("📋 目前環境變數狀態:", "INFO")
+        Config.show_config()
+    elif not Config.validate():
         log_message("❌ 配置驗證失敗", "ERROR")
         log_message("💡 請檢查環境變數設置", "INFO")
-        exit(1)
-    log_message("✅ Telegram Bot 配置驗證成功")
+        log_message("📋 目前環境變數狀態:", "INFO")
+        Config.show_config()
+    else:
+        log_message("✅ Telegram Bot 配置驗證成功")
+        config_valid = True
 except Exception as e:
     log_message(f"❌ 配置錯誤: {e}", "ERROR")
     log_message("💡 請檢查環境變數設置", "INFO")
-    exit(1)
+    log_message("📋 目前環境變數狀態:", "INFO")
+    Config.show_config()
+
+if not config_valid:
+    log_message("🚨 配置無效，啟動失敗模式", "ERROR")
+    # 不立即退出，而是啟動一個基本的錯誤報告服務
 
 # 初始化處理器
-try:
-    log_message("📦 正在初始化處理器...")
-    
-    card_processor = NameCardProcessor()
-    log_message("✅ NameCardProcessor 初始化成功")
-    
-    notion_manager = NotionManager()
-    log_message("✅ NotionManager 初始化成功")
-    
-    batch_manager = BatchManager()
-    log_message("✅ BatchManager 初始化成功")
-    
-    multi_card_processor = MultiCardProcessor()
-    log_message("✅ MultiCardProcessor 初始化成功")
-    
-    user_interaction_handler = UserInteractionHandler()
-    log_message("✅ UserInteractionHandler 初始化成功")
-    
-    telegram_bot_handler = TelegramBotHandler()
-    log_message("✅ TelegramBotHandler 初始化成功")
-    
-    log_message("✅ 所有處理器初始化成功")
-except Exception as e:
-    log_message(f"❌ 處理器初始化失敗: {e}", "ERROR")
-    import traceback
-    log_message(f"錯誤詳情: {traceback.format_exc()}", "ERROR")
-    exit(1)
+processors_valid = False
+card_processor = None
+notion_manager = None
+batch_manager = None
+multi_card_processor = None
+user_interaction_handler = None
+telegram_bot_handler = None
+
+if config_valid:
+    try:
+        log_message("📦 正在初始化處理器...")
+        
+        card_processor = NameCardProcessor()
+        log_message("✅ NameCardProcessor 初始化成功")
+        
+        notion_manager = NotionManager()
+        log_message("✅ NotionManager 初始化成功")
+        
+        batch_manager = BatchManager()
+        log_message("✅ BatchManager 初始化成功")
+        
+        multi_card_processor = MultiCardProcessor()
+        log_message("✅ MultiCardProcessor 初始化成功")
+        
+        user_interaction_handler = UserInteractionHandler()
+        log_message("✅ UserInteractionHandler 初始化成功")
+        
+        telegram_bot_handler = TelegramBotHandler()
+        log_message("✅ TelegramBotHandler 初始化成功")
+        
+        log_message("✅ 所有處理器初始化成功")
+        processors_valid = True
+    except Exception as e:
+        log_message(f"❌ 處理器初始化失敗: {e}", "ERROR")
+        import traceback
+        log_message(f"錯誤詳情: {traceback.format_exc()}", "ERROR")
+        log_message("⚠️ 將以錯誤模式運行", "WARNING")
+else:
+    log_message("⚠️ 配置無效，跳過處理器初始化", "WARNING")
 
 # Telegram Bot Application
-application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
+application = None
+if config_valid and Config.TELEGRAM_BOT_TOKEN:
+    try:
+        application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
+        log_message("✅ Telegram Bot Application 初始化成功")
+    except Exception as e:
+        log_message(f"❌ Telegram Bot Application 初始化失敗: {e}", "ERROR")
+        application = None
+else:
+    log_message("⚠️ Telegram Bot Token 無效，跳過 Application 初始化", "WARNING")
 
 # === Telegram Bot 指令處理器 ===
 
@@ -298,7 +328,9 @@ async def handle_photo_message(
                 "🤖 使用 Google Gemini AI + 多名片檢測"
             )
 
-        await telegram_bot_handler.safe_send_message(chat_id, processing_message)
+        # 立即發送處理開始訊息
+        processing_msg_result = await telegram_bot_handler.safe_send_message(chat_id, processing_message)
+        processing_msg_id = processing_msg_result.get("message_id") if processing_msg_result.get("success") else None
 
         # 下載圖片
         photo = update.message.photo[-1]  # 獲取最高解析度的圖片
@@ -321,19 +353,77 @@ async def handle_photo_message(
             await telegram_bot_handler.safe_send_message(chat_id, error_msg)
             return
 
+        # 發送 AI 處理中的進度更新
+        ai_progress_msg = "🤖 圖片下載完成，正在進行 AI 識別中..."
+        await telegram_bot_handler.safe_send_message(chat_id, ai_progress_msg)
+
         # 使用多名片處理器進行品質檢查
         log_message("🔍 開始多名片 AI 識別和品質評估...")
         try:
-            analysis_result = multi_card_processor.process_image_with_quality_check(
-                bytes(image_bytes)
+            # 設置處理超時 (最大 90 秒)
+            import asyncio
+            analysis_result = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    multi_card_processor.process_image_with_quality_check,
+                    bytes(image_bytes)
+                ),
+                timeout=90.0
             )
             log_message("✅ AI 識別和品質評估完成")
+        except asyncio.TimeoutError:
+            log_message("❌ AI 識別處理超時 (90秒)", "ERROR")
+            timeout_error_msg = (
+                "⏰ **AI 識別處理超時**\n\n"
+                "處理時間超過 90 秒限制，請嘗試：\n"
+                "• 📷 上傳更清晰的圖片\n"
+                "• 📏 降低圖片解析度 (<2048x2048)\n"
+                "• 📦 減小檔案大小 (<3MB)\n"
+                "• ⏰ 稍候 2-3 分鐘後重試\n\n"
+                "💡 如問題持續，請聯繫管理員"
+            )
+            
+            if is_batch_mode:
+                batch_manager.add_failed_card(user_id, "AI 識別超時")
+                progress_msg = batch_manager.get_batch_progress_message(user_id)
+                timeout_error_msg += f"\n\n{progress_msg}"
+                
+            await telegram_bot_handler.safe_send_message(chat_id, timeout_error_msg)
+            return
+            
         except Exception as ai_error:
             log_message(f"❌ AI 識別過程發生錯誤: {ai_error}", "ERROR")
             import traceback
             log_message(f"AI 錯誤堆疊: {traceback.format_exc()}", "ERROR")
             
-            error_msg = "❌ AI 識別過程中發生錯誤，請稍後重試或聯繫管理員"
+            # 根據錯誤類型提供具體建議
+            error_str = str(ai_error).lower()
+            if "quota" in error_str or "limit" in error_str:
+                error_msg = (
+                    "🔑 **AI 服務配額已用完**\n\n"
+                    "Gemini AI 今日配額已達上限，請：\n"
+                    "• ⏰ 明天再試\n"
+                    "• 📞 聯繫管理員增加配額\n"
+                    "• 🔄 嘗試使用備用服務"
+                )
+            elif "network" in error_str or "connection" in error_str:
+                error_msg = (
+                    "🌐 **網路連接問題**\n\n"
+                    "與 AI 服務連接中斷，請：\n"
+                    "• 🔄 稍後重試 (1-2 分鐘)\n"
+                    "• 📶 檢查網路連接\n"
+                    "• 📞 如問題持續，請聯繫管理員"
+                )
+            else:
+                error_msg = (
+                    "❌ **AI 識別過程中發生錯誤**\n\n"
+                    f"錯誤詳情：{str(ai_error)[:100]}...\n\n"
+                    "建議：\n"
+                    "• 🔄 重新上傳圖片\n"
+                    "• 📷 確保圖片清晰度良好\n"
+                    "• 📞 如問題持續，請聯繫管理員"
+                )
+            
             if is_batch_mode:
                 batch_manager.add_failed_card(user_id, str(ai_error))
                 progress_msg = batch_manager.get_batch_progress_message(user_id)
@@ -390,16 +480,48 @@ async def handle_photo_message(
         
         # 根據錯誤類型提供更具體的錯誤信息
         error_type = type(e).__name__
-        if "timeout" in str(e).lower():
-            error_msg = "⏰ 處理超時，請稍後重試或上傳更小的圖片"
-        elif "memory" in str(e).lower() or "MemoryError" in error_type:
-            error_msg = "💾 圖片太大，請上傳較小的圖片"
-        elif "network" in str(e).lower() or "ConnectionError" in error_type:
-            error_msg = "🌐 網路連接問題，請稍後重試"
-        elif "api" in str(e).lower():
-            error_msg = "🔑 API 服務暫時不可用，請稍後重試"
+        error_str = str(e).lower()
+        
+        if "timeout" in error_str or "TimeoutError" in error_type:
+            error_msg = (
+                "⏰ **處理超時**\n\n"
+                "建議解決方案：\n"
+                "• 📷 上傳較小的圖片 (<3MB)\n"
+                "• 📏 降低解析度 (<2048x2048)\n"
+                "• ⏰ 等待 2-3 分鐘後重試\n"
+                "• 🔄 如果是網路問題，請檢查連接"
+            )
+        elif "memory" in error_str or "MemoryError" in error_type:
+            error_msg = (
+                "💾 **記憶體不足**\n\n"
+                "圖片太大，請：\n"
+                "• 📏 解析度 < 2048x2048\n"
+                "• 📦 檔案大小 < 3MB\n"
+                "• 🎨 格式：JPG/PNG"
+            )
+        elif "network" in error_str or "ConnectionError" in error_type:
+            error_msg = (
+                "🌐 **網路連接問題**\n\n"
+                "• 🔄 請稍後重試 (1-2 分鐘)\n"
+                "• 📶 檢查網路連接穩定性\n"
+                "• 📞 問題持續請聯繫管理員"
+            )
+        elif "api" in error_str or "quota" in error_str:
+            error_msg = (
+                "🔑 **API 服務問題**\n\n"
+                "• ⏰ AI 服務暫時不可用\n"
+                "• 🔄 請稍後重試\n"
+                "• 📞 如問題持續，請聯繫管理員"
+            )
         else:
-            error_msg = f"❌ 處理過程中發生錯誤，請稍後重試\n\n🔍 錯誤類型: {error_type}"
+            error_msg = (
+                f"❌ **處理過程中發生錯誤**\n\n"
+                f"🔍 錯誤類型: {error_type}\n"
+                f"📝 錯誤摘要: {str(e)[:80]}...\n\n"
+                "建議：\n"
+                "• 🔄 重新上傳圖片\n"
+                "• 📞 如問題持續，請聯繫管理員"
+            )
 
         # 記錄失敗（如果在批次模式中）
         if is_batch_mode:
