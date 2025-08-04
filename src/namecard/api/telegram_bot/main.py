@@ -160,12 +160,7 @@ if config_valid and Config.TELEGRAM_BOT_TOKEN:
     try:
         application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
         log_message("✅ Telegram Bot Application 初始化成功")
-        
-        # 🔧 關鍵修復：立即設置處理器，確保在部署環境中正常工作
-        if setup_telegram_handlers():
-            log_message("✅ Telegram Bot 處理器設置完成")
-        else:
-            log_message("❌ Telegram Bot 處理器設置失敗", "ERROR")
+        log_message("⏳ 處理器將在所有函數定義完成後設置")
             
     except Exception as e:
         log_message(f"❌ Telegram Bot Application 初始化失敗: {e}", "ERROR")
@@ -927,6 +922,18 @@ def index():
 
 
 
+
+# 🔧 關鍵修復：在所有函數定義完成後設置處理器
+if application and config_valid:
+    try:
+        if setup_telegram_handlers():
+            log_message("✅ Telegram Bot 處理器設置完成")
+        else:
+            log_message("❌ Telegram Bot 處理器設置失敗", "ERROR")
+    except Exception as e:
+        log_message(f"❌ 處理器設置過程發生錯誤: {e}", "ERROR")
+        import traceback
+        log_message(f"錯誤詳情: {traceback.format_exc()}", "ERROR")
 
 
 if __name__ == "__main__":
