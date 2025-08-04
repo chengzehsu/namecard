@@ -561,15 +561,15 @@ def telegram_webhook():
             log_message("❌ 無效的數據格式：不是字典", "ERROR")
             return "Invalid data format", 400
             
+        # 檢查是否是測試數據（在檢查 update_id 之前）
+        if update_data.get("test") == "data":
+            log_message("🧪 檢測到測試數據，返回成功", "INFO")
+            return "Test data received successfully", 200
+            
         # 檢查是否包含必要的 update_id
         if "update_id" not in update_data:
             log_message("❌ 無效的 Telegram Update：缺少 update_id", "ERROR")
             return "Invalid Telegram Update: missing update_id", 400
-            
-        # 檢查是否是測試數據
-        if update_data.get("test") == "data":
-            log_message("🧪 檢測到測試數據，返回成功", "INFO")
-            return "Test data received successfully", 200
 
         # 創建 Update 對象並處理
         try:
