@@ -121,12 +121,52 @@ if config_valid:
 else:
     log_message("⚠️ 配置無效，跳過處理器初始化", "WARNING")
 
+
+# === Telegram Bot 處理器設置函數 ===
+
+def setup_telegram_handlers():
+    """設置 Telegram Bot 處理器"""
+    if not application:
+        log_message("❌ 無法設置處理器：Application 未初始化", "ERROR")
+        return False
+    
+    try:
+        # 指令處理器
+        application.add_handler(CommandHandler("start", start_command))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("batch", batch_command))
+        application.add_handler(CommandHandler("endbatch", endbatch_command))
+        application.add_handler(CommandHandler("status", status_command))
+
+        # 訊息處理器
+        application.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
+        )
+        application.add_handler(MessageHandler(filters.PHOTO, handle_photo_message))
+        
+        log_message("🔧 所有處理器已成功註冊")
+        return True
+        
+    except Exception as e:
+        log_message(f"❌ 處理器註冊失敗: {e}", "ERROR")
+        return False
+
+
+# === Telegram Bot Application 初始化 ===
+
 # Telegram Bot Application
 application = None
 if config_valid and Config.TELEGRAM_BOT_TOKEN:
     try:
         application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
         log_message("✅ Telegram Bot Application 初始化成功")
+        
+        # 🔧 關鍵修復：立即設置處理器，確保在部署環境中正常工作
+        if setup_telegram_handlers():
+            log_message("✅ Telegram Bot 處理器設置完成")
+        else:
+            log_message("❌ Telegram Bot 處理器設置失敗", "ERROR")
+            
     except Exception as e:
         log_message(f"❌ Telegram Bot Application 初始化失敗: {e}", "ERROR")
         application = None
@@ -886,28 +926,12 @@ def index():
 # === 初始化和啟動 ===
 
 
-def setup_telegram_handlers():
-    """設置 Telegram Bot 處理器"""
-    # 指令處理器
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("batch", batch_command))
-    application.add_handler(CommandHandler("endbatch", endbatch_command))
-    application.add_handler(CommandHandler("status", status_command))
 
-    # 訊息處理器
-    application.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
-    )
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo_message))
-
-    log_message("✅ Telegram Bot 處理器設置完成")
 
 
 if __name__ == "__main__":
-    # 設置 Telegram Bot 處理器
-    setup_telegram_handlers()
-
+    # 🔧 處理器現在在 application 初始化時自動設置，無需重複調用
+    
     # 使用統一日誌輸出
     log_message("🚀 啟動 Telegram Bot 名片管理系統...")
     log_message("📋 使用 Notion 作為資料庫")
