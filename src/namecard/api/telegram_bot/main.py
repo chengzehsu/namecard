@@ -55,6 +55,12 @@ def log_message(message, level="INFO"):
 
 # 驗證配置
 try:
+    # 檢查 Telegram Bot Token
+    if not Config.TELEGRAM_BOT_TOKEN or Config.TELEGRAM_BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
+        log_message("❌ TELEGRAM_BOT_TOKEN 未設置", "ERROR")
+        log_message("💡 請在 Zeabur Dashboard 設置 TELEGRAM_BOT_TOKEN", "INFO")
+        exit(1)
+    
     if not Config.validate():
         log_message("❌ 配置驗證失敗", "ERROR")
         log_message("💡 請檢查環境變數設置", "INFO")
@@ -67,15 +73,31 @@ except Exception as e:
 
 # 初始化處理器
 try:
+    log_message("📦 正在初始化處理器...")
+    
     card_processor = NameCardProcessor()
+    log_message("✅ NameCardProcessor 初始化成功")
+    
     notion_manager = NotionManager()
+    log_message("✅ NotionManager 初始化成功")
+    
     batch_manager = BatchManager()
+    log_message("✅ BatchManager 初始化成功")
+    
     multi_card_processor = MultiCardProcessor()
+    log_message("✅ MultiCardProcessor 初始化成功")
+    
     user_interaction_handler = UserInteractionHandler()
+    log_message("✅ UserInteractionHandler 初始化成功")
+    
     telegram_bot_handler = TelegramBotHandler()
+    log_message("✅ TelegramBotHandler 初始化成功")
+    
     log_message("✅ 所有處理器初始化成功")
 except Exception as e:
     log_message(f"❌ 處理器初始化失敗: {e}", "ERROR")
+    import traceback
+    log_message(f"錯誤詳情: {traceback.format_exc()}", "ERROR")
     exit(1)
 
 # Telegram Bot Application
@@ -558,6 +580,7 @@ def telegram_webhook():
                     except Exception as inner_e:
                         log_message(f"❌ 處理更新時發生錯誤: {inner_e}", "ERROR")
                         import traceback
+                        log_message(f"完整錯誤堆疊: {traceback.format_exc()}", "ERROR")
                         traceback.print_exc()
                         
                         # 嘗試發送錯誤訊息給用戶
