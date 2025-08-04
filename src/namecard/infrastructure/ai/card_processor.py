@@ -1,5 +1,7 @@
 import io
 import json
+import time
+import random
 
 import google.generativeai as genai
 from PIL import Image
@@ -57,35 +59,77 @@ class NameCardProcessor:
         error_str = str(error_message).lower()
         return any(keyword in error_str for keyword in quota_error_keywords)
 
-    def _generate_content_with_fallback(self, content):
-        """使用主要 API Key 生成內容，失敗時自動切換到備用 API Key"""
-        try:
-            # 首先嘗試使用當前 API Key
-            response = self.model.generate_content(content)
-            return response.text.strip()
+    def _is_transient_error(self, error_message):
+        """檢查是否為暫時性錯誤（可重試）"""
+        transient_error_keywords = [
+            "500",
+            "502",
+            "503",
+            "504",
+            "internal error",
+            "service unavailable",
+            "timeout",
+            "temporary",
+            "try again",
+            "retry",
+            "network",
+            "connection",
+        ]
 
-        except Exception as e:
-            # 檢查是否為額度超限錯誤
-            if (
-                self._is_quota_exceeded_error(str(e))
-                and not self.using_fallback
-                and self.fallback_api_key
-            ):
-                try:
-                    # 切換到備用 API Key
-                    self._switch_to_fallback_api()
+        error_str = str(error_message).lower()
+        return any(keyword in error_str for keyword in transient_error_keywords)
 
-                    # 重新嘗試生成內容
-                    response = self.model.generate_content(content)
-                    return response.text.strip()
+    def _generate_content_with_fallback(self, content, max_retries=3):
+        """使用主要 API Key 生成內容，支援重試和備用 API Key 切換"""
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                # 嘗試生成內容
+                response = self.model.generate_content(content)
+                return response.text.strip()
 
-                except Exception as fallback_error:
-                    raise Exception(
-                        f"主要和備用 API Key 都失敗: 主要錯誤={str(e)}, 備用錯誤={str(fallback_error)}"
-                    )
-            else:
-                # 不是額度錯誤或已經使用備用 API Key，直接拋出原始錯誤
-                raise e
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                
+                # 檢查是否為額度超限錯誤
+                if (
+                    self._is_quota_exceeded_error(error_str)
+                    and not self.using_fallback
+                    and self.fallback_api_key
+                ):
+                    try:
+                        print(f"🔄 API 額度超限，切換到備用 API Key...")
+                        self._switch_to_fallback_api()
+                        
+                        # 用備用 API Key 重試
+                        response = self.model.generate_content(content)
+                        return response.text.strip()
+                        
+                    except Exception as fallback_error:
+                        raise Exception(
+                            f"主要和備用 API Key 都失敗: 主要錯誤={error_str}, 備用錯誤={str(fallback_error)}"
+                        )
+                
+                # 檢查是否為暫時性錯誤（可重試）
+                elif self._is_transient_error(error_str):
+                    if attempt < max_retries - 1:  # 不是最後一次嘗試
+                        # 指數退避策略：1秒、2秒、4秒
+                        wait_time = (2 ** attempt) + random.uniform(0, 1)
+                        print(f"⚠️ 暫時性錯誤（{error_str[:100]}...），{wait_time:.1f}秒後重試 (第{attempt + 1}/{max_retries}次)")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        # 最後一次嘗試失敗
+                        raise Exception(f"經過{max_retries}次重試後仍然失敗: {error_str}")
+                
+                else:
+                    # 其他類型錯誤，不重試
+                    raise e
+        
+        # 如果到這裡，表示所有重試都失敗了
+        raise Exception(f"經過{max_retries}次重試後仍然失敗: {str(last_error)}")
 
     def extract_info_from_image(self, image_bytes):
         """從名片圖片中提取結構化資訊（支援多名片檢測）"""
