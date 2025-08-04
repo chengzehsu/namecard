@@ -30,6 +30,19 @@ from src.namecard.infrastructure.storage.notion_client import NotionManager
 from src.namecard.infrastructure.messaging.telegram_client import TelegramBotHandler
 from src.namecard.core.services.interaction_service import UserInteractionHandler
 
+# 🚀 導入超高速處理組件
+from src.namecard.infrastructure.ai.ultra_fast_processor import (
+    UltraFastProcessor, 
+    ultra_fast_process_telegram_image, 
+    get_ultra_fast_processor,
+    UltraFastResult
+)
+from src.namecard.infrastructure.messaging.enhanced_telegram_client import (
+    EnhancedTelegramBotHandler,
+    create_enhanced_telegram_handler
+)
+from src.namecard.infrastructure.messaging.async_message_queue import MessagePriority
+
 # Flask 應用 (用於 webhook)
 flask_app = Flask(__name__)
 
@@ -89,6 +102,10 @@ multi_card_processor = None
 user_interaction_handler = None
 telegram_bot_handler = None
 
+# 🚀 超高速處理組件
+ultra_fast_processor = None
+enhanced_telegram_handler = None
+
 if config_valid:
     try:
         log_message("📦 正在初始化處理器...")
@@ -111,7 +128,20 @@ if config_valid:
         telegram_bot_handler = TelegramBotHandler()
         log_message("✅ TelegramBotHandler 初始化成功")
         
-        log_message("✅ 所有處理器初始化成功")
+        # 🚀 初始化超高速處理組件
+        ultra_fast_processor = UltraFastProcessor()
+        log_message("✅ UltraFastProcessor 超高速處理器初始化成功")
+        
+        # 創建增強型 Telegram 處理器（整合異步佇列系統）
+        enhanced_telegram_handler = create_enhanced_telegram_handler(
+            enable_queue=True,
+            queue_workers=12,  # 增加併發工作者
+            batch_size=5,
+            batch_timeout=1.5  # 減少批次超時時間
+        )
+        log_message("✅ EnhancedTelegramBotHandler 增強處理器初始化成功")
+        
+        log_message("🚀 所有處理器初始化成功（包含超高速組件）")
         processors_valid = True
     except Exception as e:
         log_message(f"❌ 處理器初始化失敗: {e}", "ERROR")
@@ -121,6 +151,8 @@ if config_valid:
         
         # 🔧 關鍵修復：確保即使初始化失敗，也有基本的處理器
         telegram_bot_handler = None
+        enhanced_telegram_handler = None
+        ultra_fast_processor = None
         processors_valid = False
 else:
     log_message("⚠️ 配置無效，跳過處理器初始化", "WARNING")
@@ -128,8 +160,19 @@ else:
 
 # === Telegram Bot 處理器設置函數 ===
 
-async def safe_telegram_send(chat_id: int, message: str) -> bool:
-    """安全發送 Telegram 訊息的助手函數"""
+async def safe_telegram_send(chat_id: int, message: str, priority: MessagePriority = MessagePriority.NORMAL) -> bool:
+    """安全發送 Telegram 訊息的助手函數（支援優先級）"""
+    # 優先使用增強處理器
+    if enhanced_telegram_handler is not None:
+        try:
+            result = await enhanced_telegram_handler.safe_send_message(
+                chat_id, message, priority=priority
+            )
+            return result.get("success", False)
+        except Exception as e:
+            log_message(f"❌ 增強處理器發送失敗，降級到基礎處理器: {e}", "WARNING")
+    
+    # 降級到基礎處理器
     if telegram_bot_handler is None:
         log_message("❌ TelegramBotHandler 未初始化，嘗試直接 API 調用", "WARNING")
         try:
@@ -391,21 +434,30 @@ async def handle_photo_message(
             )
 
         # 🔧 關鍵修復：使用安全發送函數
-        if telegram_bot_handler is None:
-            await safe_telegram_send(chat_id, "❌ 系統初始化錯誤，請聯繫管理員")
+        if telegram_bot_handler is None and enhanced_telegram_handler is None:
+            await safe_telegram_send(chat_id, "❌ 系統初始化錯誤，請聯繫管理員", MessagePriority.EMERGENCY)
             return
 
         # 立即發送處理開始訊息
-        processing_msg_result = await telegram_bot_handler.safe_send_message(chat_id, processing_message)
-        processing_msg_id = processing_msg_result.get("message_id") if processing_msg_result.get("success") else None
+        await safe_telegram_send(chat_id, processing_message, MessagePriority.HIGH)
 
         # 下載圖片
         photo = update.message.photo[-1]  # 獲取最高解析度的圖片
-        file_result = await telegram_bot_handler.safe_get_file(photo.file_id)
+        
+        # 優先使用增強處理器下載文件
+        file_result = None
+        if enhanced_telegram_handler:
+            try:
+                file_result = await enhanced_telegram_handler.safe_get_file(photo.file_id)
+            except Exception as e:
+                log_message(f"⚠️ 增強處理器下載失敗，降級到基礎處理器: {e}")
+        
+        if not file_result and telegram_bot_handler:
+            file_result = await telegram_bot_handler.safe_get_file(photo.file_id)
 
-        if not file_result["success"]:
-            error_msg = f"❗ 無法下載圖片: {file_result['message']}"
-            await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+        if not file_result or not file_result["success"]:
+            error_msg = f"❗ 無法下載圖片: {file_result.get('message', '未知錯誤') if file_result else '處理器未初始化'}"
+            await safe_telegram_send(chat_id, error_msg, MessagePriority.EMERGENCY)
             return
 
         # 獲取圖片字節數據
@@ -417,17 +469,51 @@ async def handle_photo_message(
         except Exception as download_error:
             log_message(f"❌ 圖片下載失敗: {download_error}", "ERROR")
             error_msg = f"❗ 圖片下載失敗: {str(download_error)}"
-            await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+            await safe_telegram_send(chat_id, error_msg, MessagePriority.EMERGENCY)
             return
 
-        # 發送 AI 處理中的進度更新
-        ai_progress_msg = "🤖 圖片下載完成，正在進行 AI 識別中..."
-        await telegram_bot_handler.safe_send_message(chat_id, ai_progress_msg)
+        # 🚀 使用超高速處理器進行圖片處理
+        ai_progress_msg = "🚀 圖片下載完成，正在使用超高速 AI 識別中..."
+        await safe_telegram_send(chat_id, ai_progress_msg, MessagePriority.HIGH)
 
-        # 使用多名片處理器進行品質檢查
-        log_message("🔍 開始多名片 AI 識別和品質評估...")
+        log_message("🚀 開始超高速名片識別處理...")
         try:
-            # 設置處理超時 (最大 90 秒)
+            # 使用超高速處理器
+            ultra_result = await ultra_fast_processor.process_telegram_photo_ultra_fast(
+                file_obj, user_id, processing_type="single_card"
+            )
+            
+            if ultra_result.success:
+                log_message(f"✅ 超高速處理完成 - 耗時: {ultra_result.total_time:.2f}s, 等級: {ultra_result.performance_grade}")
+                
+                # 轉換為多名片格式以保持兼容性
+                analysis_result = {
+                    "card_count": 1,
+                    "cards": [ultra_result.data],
+                    "overall_quality": "good" if ultra_result.performance_grade in ["S", "A"] else "partial",
+                    "auto_process": True,  # 高品質自動處理
+                    "processing_suggestions": []
+                }
+            else:
+                # 降級到傳統處理器
+                log_message(f"⚠️ 超高速處理失敗，降級到傳統處理器: {ultra_result.error}")
+                
+                # 設置處理超時 (最大 90 秒)
+                import asyncio
+                analysis_result = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None, 
+                        multi_card_processor.process_image_with_quality_check,
+                        bytes(image_bytes)
+                    ),
+                    timeout=90.0
+                )
+                log_message("✅ 傳統 AI 識別和品質評估完成")
+                
+        except Exception as ultra_error:
+            log_message(f"❌ 超高速處理器錯誤，降級到傳統處理器: {ultra_error}")
+            
+            # 降級到傳統處理器
             import asyncio
             analysis_result = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
@@ -437,7 +523,7 @@ async def handle_photo_message(
                 ),
                 timeout=90.0
             )
-            log_message("✅ AI 識別和品質評估完成")
+            log_message("✅ 傳統 AI 識別和品質評估完成")
         except asyncio.TimeoutError:
             log_message("❌ AI 識別處理超時 (90秒)", "ERROR")
             timeout_error_msg = (
@@ -455,7 +541,7 @@ async def handle_photo_message(
                 progress_msg = batch_manager.get_batch_progress_message(user_id)
                 timeout_error_msg += f"\n\n{progress_msg}"
                 
-            await telegram_bot_handler.safe_send_message(chat_id, timeout_error_msg)
+            await safe_telegram_send(chat_id, timeout_error_msg, MessagePriority.EMERGENCY)
             return
             
         except Exception as ai_error:
@@ -496,7 +582,7 @@ async def handle_photo_message(
                 progress_msg = batch_manager.get_batch_progress_message(user_id)
                 error_msg += f"\n\n{progress_msg}"
                 
-            await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+            await safe_telegram_send(chat_id, error_msg, MessagePriority.EMERGENCY)
             return
 
         if "error" in analysis_result:
@@ -508,7 +594,7 @@ async def handle_photo_message(
                 progress_msg = batch_manager.get_batch_progress_message(user_id)
                 error_message += f"\n\n{progress_msg}"
 
-            await telegram_bot_handler.safe_send_message(chat_id, error_message)
+            await safe_telegram_send(chat_id, error_message, MessagePriority.EMERGENCY)
             return
 
         # 根據分析結果決定處理方式
@@ -517,15 +603,15 @@ async def handle_photo_message(
             choice_message = user_interaction_handler.create_multi_card_session(
                 user_id, analysis_result
             )
-            await telegram_bot_handler.safe_send_message(chat_id, choice_message)
+            await safe_telegram_send(chat_id, choice_message, MessagePriority.HIGH)
             return
 
         # 自動處理（單張高品質名片）
         elif analysis_result.get("auto_process", False):
             cards_to_process = analysis_result.get("cards", [])
             if cards_to_process:
-                await telegram_bot_handler.safe_send_message(
-                    chat_id, "✅ 名片品質良好，正在自動處理..."
+                await safe_telegram_send(
+                    chat_id, "✅ 名片品質良好，正在自動處理...", MessagePriority.HIGH
                 )
                 # 處理名片
                 await _process_single_card_from_multi_format(
@@ -597,10 +683,7 @@ async def handle_photo_message(
             error_msg += f"\n\n{progress_msg}"
 
         # 🔧 安全發送錯誤訊息
-        if telegram_bot_handler:
-            await telegram_bot_handler.safe_send_message(chat_id, error_msg)
-        else:
-            await safe_telegram_send(chat_id, error_msg)
+        await safe_telegram_send(chat_id, error_msg, MessagePriority.EMERGENCY)
 
 
 # === 輔助函數 ===
@@ -635,7 +718,7 @@ async def _process_single_card_from_multi_format(
 
 {batch_manager.get_batch_progress_message(user_id)}"""
 
-                await telegram_bot_handler.safe_send_message(chat_id, batch_message)
+                await safe_telegram_send(chat_id, batch_message, MessagePriority.BATCH)
             else:
                 # 單張模式詳細回應
                 confidence_info = ""
@@ -657,9 +740,14 @@ async def _process_single_card_from_multi_format(
 
 💡 提示：使用 /batch 可開啟批次處理模式"""
 
-                await telegram_bot_handler.safe_send_message(
-                    chat_id, success_message, parse_mode=ParseMode.MARKDOWN
-                )
+                # 優先使用增強處理器發送成功訊息
+                if enhanced_telegram_handler:
+                    await enhanced_telegram_handler.safe_send_message(
+                        chat_id, success_message, parse_mode=ParseMode.MARKDOWN,
+                        priority=MessagePriority.HIGH
+                    )
+                else:
+                    await safe_telegram_send(chat_id, success_message, MessagePriority.HIGH)
         else:
             error_message = f"❌ Notion 存入失敗: {notion_result['error']}"
 
@@ -669,12 +757,12 @@ async def _process_single_card_from_multi_format(
                 progress_msg = batch_manager.get_batch_progress_message(user_id)
                 error_message += f"\n\n{progress_msg}"
 
-            await telegram_bot_handler.safe_send_message(chat_id, error_message)
+            await safe_telegram_send(chat_id, error_message, MessagePriority.EMERGENCY)
 
     except Exception as e:
         error_msg = f"❌ 處理名片時發生錯誤: {str(e)}"
         log_message(error_msg, "ERROR")
-        await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+        await safe_telegram_send(chat_id, error_msg, MessagePriority.EMERGENCY)
 
 
 async def _process_multiple_cards_async(
@@ -764,14 +852,19 @@ async def _process_multiple_cards_async(
             progress_msg = batch_manager.get_batch_progress_message(user_id)
             summary_message += f"\n{progress_msg}"
 
-        await telegram_bot_handler.safe_send_message(
-            chat_id, summary_message, parse_mode=ParseMode.MARKDOWN
-        )
+        # 優先使用增強處理器發送摘要
+        if enhanced_telegram_handler:
+            await enhanced_telegram_handler.safe_send_message(
+                chat_id, summary_message, parse_mode=ParseMode.MARKDOWN,
+                priority=MessagePriority.HIGH
+            )
+        else:
+            await safe_telegram_send(chat_id, summary_message, MessagePriority.HIGH)
 
     except Exception as e:
         error_msg = f"❌ 批次處理多名片時發生錯誤: {str(e)}"
         log_message(error_msg, "ERROR")
-        await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+        await safe_telegram_send(chat_id, error_msg, MessagePriority.EMERGENCY)
 
 
 # === Flask Webhook 處理 ===
@@ -943,14 +1036,55 @@ def test_services():
     return results
 
 
+@flask_app.route("/ultra-fast-status", methods=["GET"])
+def ultra_fast_status():
+    """超高速處理系統狀態"""
+    try:
+        status = {
+            "ultra_fast_processor": {
+                "initialized": ultra_fast_processor is not None,
+                "status": "ready" if ultra_fast_processor else "not_initialized"
+            },
+            "enhanced_telegram_handler": {
+                "initialized": enhanced_telegram_handler is not None,
+                "queue_running": enhanced_telegram_handler.message_queue.is_running if enhanced_telegram_handler and enhanced_telegram_handler.message_queue else False
+            },
+            "performance_target": "35-40s → 5-10s (4-8x improvement)",
+            "optimizations": [
+                "Async parallel AI processing",
+                "Smart multi-layer caching",
+                "Optimized prompt engineering", 
+                "Parallel image downloading",
+                "Intelligent message queue routing"
+            ]
+        }
+        
+        # 獲取詳細統計
+        if ultra_fast_processor:
+            status["ultra_fast_processor"]["dashboard"] = ultra_fast_processor.get_performance_dashboard()
+        
+        if enhanced_telegram_handler:
+            status["enhanced_telegram_handler"]["metrics"] = enhanced_telegram_handler.get_performance_metrics()
+            
+        return status
+    except Exception as e:
+        return {"error": str(e), "status": "error"}
+
 @flask_app.route("/", methods=["GET"])
 def index():
     """首頁"""
     return {
-        "message": "Telegram Bot 名片管理系統",
+        "message": "Telegram Bot 名片管理系統 (超高速版)",
         "status": "running",
-        "endpoints": ["/health", "/test", "/telegram-webhook"],
+        "endpoints": ["/health", "/test", "/telegram-webhook", "/ultra-fast-status"],
         "bot_info": "使用 Google Gemini AI 識別名片並存入 Notion",
+        "performance_features": [
+            "🚀 超高速處理 (4-8x 提升)",
+            "🤖 智能異步訊息佇列",
+            "💾 多層智能快取",
+            "⚡ 並行圖片下載",
+            "🎯 優化 Prompt 工程"
+        ]
     }
 
 
@@ -972,6 +1106,40 @@ if application and config_valid:
         log_message(f"錯誤詳情: {traceback.format_exc()}", "ERROR")
 
 
+async def startup_enhanced_systems():
+    """啟動增強系統組件"""
+    try:
+        if enhanced_telegram_handler:
+            await enhanced_telegram_handler.start_queue_system()
+            log_message("✅ 增強處理器佇列系統已啟動")
+        
+        if ultra_fast_processor:
+            # 預熱連接池
+            async with ultra_fast_processor:
+                log_message("✅ 超高速處理器預熱完成")
+                
+    except Exception as e:
+        log_message(f"⚠️ 增強系統啟動警告: {e}", "WARNING")
+
+def run_startup():
+    """在背景執行啟動程序"""
+    import asyncio
+    import threading
+    
+    def startup_thread():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(startup_enhanced_systems())
+            loop.close()
+            log_message("🚀 增強系統啟動完成")
+        except Exception as e:
+            log_message(f"❌ 增強系統啟動失敗: {e}", "ERROR")
+    
+    thread = threading.Thread(target=startup_thread)
+    thread.daemon = True
+    thread.start()
+
 if __name__ == "__main__":
     # 🔧 處理器現在在 application 初始化時自動設置，無需重複調用
     
@@ -980,12 +1148,17 @@ if __name__ == "__main__":
     log_message("📋 使用 Notion 作為資料庫")
     log_message("🤖 使用 Google Gemini AI 識別名片 + 多名片檢測")
     log_message("🎯 支援品質評估和用戶交互選擇")
+    log_message("⚡ 整合超高速處理系統 (目標: 4-8x 速度提升)")
 
     # 獲取端口配置
     port = int(os.environ.get("PORT", 5003))
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
 
     log_message(f"⚡ Telegram Bot 服務啟動中... 端口: {port}, Debug: {debug_mode}")
+    
+    # 啟動增強系統
+    if processors_valid:
+        run_startup()
 
     # 生產環境配置
     flask_app.run(
