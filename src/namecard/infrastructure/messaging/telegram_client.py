@@ -94,7 +94,7 @@ class TelegramBotHandler:
                 limits=httpx.Limits(
                     max_keepalive_connections=60,  # 增加到 60 個保持連接
                     max_connections=150,           # 增加到 150 個總連接數
-                    keepalive_expiry=60.0,        # 延長連接保持時間
+                    keepalive_expiry=90.0,        # 延長連接保持時間到 90 秒
                 ),
                 timeout=httpx.Timeout(
                     connect=20.0,    # 增加連接超時到 20 秒
@@ -144,7 +144,7 @@ class TelegramBotHandler:
                 limits=httpx.Limits(
                     max_keepalive_connections=60,  # 增加到 60 個保持連接
                     max_connections=150,           # 增加到 150 個總連接數
-                    keepalive_expiry=60.0,        # 延長連接保持時間
+                    keepalive_expiry=90.0,        # 延長連接保持時間到 90 秒
                 ),
                 timeout=httpx.Timeout(
                     connect=20.0,    # 增加連接超時到 20 秒
@@ -176,16 +176,16 @@ class TelegramBotHandler:
                 self._semaphore._loop != current_loop):
                 
                 self.logger.debug("創建新的 Semaphore 用於當前事件循環")
-                # 🚀 優化併發控制 - 減少到 15 避免連接池耗盡
-                self._semaphore = asyncio.Semaphore(15)  # 從 20 減少到 15
+                # 🚀 優化併發控制 - 增加到 25 更好利用連接池
+                self._semaphore = asyncio.Semaphore(25)  # 從 15 增加到 25
                 
             return self._semaphore
             
         except RuntimeError:
             # 沒有運行中的事件循環，創建一個新的 Semaphore
             self.logger.debug("沒有運行中的事件循環，創建新的 Semaphore")
-            # 🚀 優化併發控制 - 減少到 15 避免連接池耗盡
-            self._semaphore = asyncio.Semaphore(15)  # 從 20 減少到 15
+            # 🚀 優化併發控制 - 增加到 25 更好利用連接池
+            self._semaphore = asyncio.Semaphore(25)  # 從 15 增加到 25
             return self._semaphore
 
     def _check_rate_limit(self):
@@ -437,7 +437,7 @@ class TelegramBotHandler:
             current_time = time.time()
             
             # 檢查是否需要清理（避免頻繁清理）
-            if current_time - self._connection_pool_stats["last_cleanup"] < 60:
+            if current_time - self._connection_pool_stats["last_cleanup"] < 30:
                 self.logger.debug("⏳ 連接池清理冷卻中，跳過本次清理")
                 return
             
