@@ -49,21 +49,55 @@ class TelegramBotHandler:
         self.max_retries = 3
         self.base_retry_delay = 1
         
-        # 並發控制（最多同時 5 個請求）- 延遲初始化
+        # 並發控制（最多同時 10 個請求）- 延遲初始化，解決連接池問題
         self._semaphore = None
         self._semaphore_lock = None
         
     def _setup_optimized_bot(self):
-        """設置優化的 Bot 配置"""
+        """設置優化的 Bot 配置，包含連接池優化"""
         try:
-            # 🔧 簡化配置，避免初始化問題
-            # 使用標準 Bot 配置，但添加基本的錯誤處理
             if not Config.TELEGRAM_BOT_TOKEN:
                 raise ValueError("TELEGRAM_BOT_TOKEN 未設置")
-                
-            self.bot = Bot(token=Config.TELEGRAM_BOT_TOKEN)
             
-            # 初始化 httpx 客戶端（備用，暫時不使用）
+            # 🔧 配置優化的 HTTP 客戶端，解決連接池問題
+            import httpx
+            from telegram.ext import ExtBot
+            
+            # 創建優化的 HTTP 客戶端
+            self._http_client = httpx.AsyncClient(
+                limits=httpx.Limits(
+                    max_keepalive_connections=20,  # 增加保持連接數
+                    max_connections=50,            # 增加總連接數
+                    keepalive_expiry=30.0,        # 連接保持時間
+                ),
+                timeout=httpx.Timeout(
+                    connect=10.0,    # 連接超時
+                    read=30.0,       # 讀取超時
+                    write=10.0,      # 寫入超時
+                    pool=60.0        # 連接池超時
+                ),
+                http2=False  # 暫時關閉 HTTP/2，避免兼容性問題
+            )
+            
+            # 使用自定義 HTTP 客戶端創建 Bot
+            self.bot = ExtBot(
+                token=Config.TELEGRAM_BOT_TOKEN
+            )
+            
+            # 手動設置 HTTP 客戶端（如果支援）
+            if hasattr(self.bot, '_request'):
+                if hasattr(self.bot._request, '_client'):
+                    # 嘗試替換預設客戶端
+                    try:
+                        self.bot._request._client = self._http_client
+                        self.logger.info("✅ 已設置優化的 HTTP 客戶端")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ 無法設置自定義 HTTP 客戶端: {e}")
+            
+        except ImportError:
+            # 如果無法導入 ExtBot，使用標準 Bot
+            self.logger.warning("⚠️ 無法使用 ExtBot，回退到標準 Bot")
+            self.bot = Bot(token=Config.TELEGRAM_BOT_TOKEN)
             self._http_client = None
             
         except Exception as e:
@@ -82,14 +116,16 @@ class TelegramBotHandler:
                 self._semaphore._loop != current_loop):
                 
                 self.logger.debug("創建新的 Semaphore 用於當前事件循環")
-                self._semaphore = asyncio.Semaphore(5)
+                # 🔧 增加併發數量以支援更多同時請求
+                self._semaphore = asyncio.Semaphore(10)
                 
             return self._semaphore
             
         except RuntimeError:
             # 沒有運行中的事件循環，創建一個新的 Semaphore
             self.logger.debug("沒有運行中的事件循環，創建新的 Semaphore")
-            self._semaphore = asyncio.Semaphore(5)
+            # 🔧 增加併發數量以支援更多同時請求
+            self._semaphore = asyncio.Semaphore(10)
             return self._semaphore
 
     def _log_error(self, error_type: str, error: Exception, context: str = ""):
@@ -270,8 +306,19 @@ class TelegramBotHandler:
 
     async def close(self):
         """清理資源"""
-        if hasattr(self, '_http_client'):
-            await self._http_client.aclose()
+        try:
+            # 清理自定義 HTTP 客戶端
+            if hasattr(self, '_http_client') and self._http_client:
+                await self._http_client.aclose()
+                self.logger.debug("✅ HTTP 客戶端已關閉")
+                
+            # 清理 Bot 資源
+            if hasattr(self, 'bot') and hasattr(self.bot, 'shutdown'):
+                await self.bot.shutdown()
+                self.logger.debug("✅ Telegram Bot 已關閉")
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ 清理資源時發生錯誤: {e}")
             
     async def __aenter__(self):
         """異步上下文管理器進入"""
