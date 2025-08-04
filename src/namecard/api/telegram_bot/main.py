@@ -556,8 +556,30 @@ def telegram_webhook():
 
         log_message(f"📄 Update data: {update_data}")
 
+        # 驗證數據格式是否為有效的 Telegram Update
+        if not isinstance(update_data, dict):
+            log_message("❌ 無效的數據格式：不是字典", "ERROR")
+            return "Invalid data format", 400
+            
+        # 檢查是否包含必要的 update_id
+        if "update_id" not in update_data:
+            log_message("❌ 無效的 Telegram Update：缺少 update_id", "ERROR")
+            return "Invalid Telegram Update: missing update_id", 400
+            
+        # 檢查是否是測試數據
+        if update_data.get("test") == "data":
+            log_message("🧪 檢測到測試數據，返回成功", "INFO")
+            return "Test data received successfully", 200
+
         # 創建 Update 對象並處理
-        update = Update.de_json(update_data, application.bot)
+        try:
+            update = Update.de_json(update_data, application.bot)
+            if not update:
+                log_message("❌ 無法解析 Telegram Update 數據", "ERROR")
+                return "Failed to parse Telegram Update", 400
+        except Exception as parse_error:
+            log_message(f"❌ 解析 Telegram Update 時發生錯誤: {parse_error}", "ERROR")
+            return f"Parse error: {str(parse_error)}", 400
 
         # 使用新的事件循環運行異步處理
         import asyncio
