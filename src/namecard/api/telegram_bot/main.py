@@ -305,14 +305,37 @@ async def handle_photo_message(
             return
 
         # 獲取圖片字節數據
-        file_obj = file_result["file"]
-        image_bytes = await file_obj.download_as_bytearray()
+        log_message("📥 開始下載圖片字節數據...")
+        try:
+            file_obj = file_result["file"]
+            image_bytes = await file_obj.download_as_bytearray()
+            log_message(f"✅ 圖片下載完成，大小: {len(image_bytes)} bytes")
+        except Exception as download_error:
+            log_message(f"❌ 圖片下載失敗: {download_error}", "ERROR")
+            error_msg = f"❗ 圖片下載失敗: {str(download_error)}"
+            await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+            return
 
         # 使用多名片處理器進行品質檢查
         log_message("🔍 開始多名片 AI 識別和品質評估...")
-        analysis_result = multi_card_processor.process_image_with_quality_check(
-            bytes(image_bytes)
-        )
+        try:
+            analysis_result = multi_card_processor.process_image_with_quality_check(
+                bytes(image_bytes)
+            )
+            log_message("✅ AI 識別和品質評估完成")
+        except Exception as ai_error:
+            log_message(f"❌ AI 識別過程發生錯誤: {ai_error}", "ERROR")
+            import traceback
+            log_message(f"AI 錯誤堆疊: {traceback.format_exc()}", "ERROR")
+            
+            error_msg = "❌ AI 識別過程中發生錯誤，請稍後重試或聯繫管理員"
+            if is_batch_mode:
+                batch_manager.add_failed_card(user_id, str(ai_error))
+                progress_msg = batch_manager.get_batch_progress_message(user_id)
+                error_msg += f"\n\n{progress_msg}"
+                
+            await telegram_bot_handler.safe_send_message(chat_id, error_msg)
+            return
 
         if "error" in analysis_result:
             error_message = f"❌ 名片識別失敗: {analysis_result['error']}"
@@ -357,7 +380,21 @@ async def handle_photo_message(
 
     except Exception as e:
         log_message(f"❌ 處理圖片時發生錯誤: {e}", "ERROR")
-        error_msg = f"❌ 處理過程中發生錯誤: {str(e)}"
+        import traceback
+        log_message(f"完整錯誤堆疊: {traceback.format_exc()}", "ERROR")
+        
+        # 根據錯誤類型提供更具體的錯誤信息
+        error_type = type(e).__name__
+        if "timeout" in str(e).lower():
+            error_msg = "⏰ 處理超時，請稍後重試或上傳更小的圖片"
+        elif "memory" in str(e).lower() or "MemoryError" in error_type:
+            error_msg = "💾 圖片太大，請上傳較小的圖片"
+        elif "network" in str(e).lower() or "ConnectionError" in error_type:
+            error_msg = "🌐 網路連接問題，請稍後重試"
+        elif "api" in str(e).lower():
+            error_msg = "🔑 API 服務暫時不可用，請稍後重試"
+        else:
+            error_msg = f"❌ 處理過程中發生錯誤，請稍後重試\n\n🔍 錯誤類型: {error_type}"
 
         # 記錄失敗（如果在批次模式中）
         if is_batch_mode:
