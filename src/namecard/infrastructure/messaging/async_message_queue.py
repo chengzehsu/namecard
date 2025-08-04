@@ -114,7 +114,7 @@ class AsyncMessageQueue:
         self.min_workers = 3
         self.max_workers = 20
         self.current_workers = initial_concurrent_workers
-        self.worker_semaphore = asyncio.Semaphore(self.current_workers)
+        self.worker_semaphore = None  # 延遲創建，避免事件循環綁定問題
         
         # 統計和監控
         self.stats = {
@@ -140,7 +140,7 @@ class AsyncMessageQueue:
         # 工作者控制
         self.workers = []
         self.is_running = False
-        self.shutdown_event = asyncio.Event()
+        self.shutdown_event = None  # 延遲創建，避免事件循環綁定問題
         
         # 訊息發送器（由外部設置）
         self.message_sender: Optional[Callable] = None
@@ -149,6 +149,34 @@ class AsyncMessageQueue:
         self.logger.info(f"   - 初始併發工作者: {self.current_workers}")
         self.logger.info(f"   - 批次大小: {self.batch_size}")
         self.logger.info(f"   - 智能合併: {'啟用' if self.enable_smart_merging else '停用'}")
+    
+    def _get_shutdown_event(self):
+        """安全獲取 shutdown_event，確保在正確的事件循環中創建"""
+        if self.shutdown_event is None:
+            try:
+                # 獲取當前事件循環
+                current_loop = asyncio.get_running_loop()
+                self.shutdown_event = asyncio.Event()
+                self.logger.debug("🔧 在當前事件循環中創建 shutdown_event")
+            except RuntimeError:
+                # 沒有運行中的事件循環，創建新的 Event
+                self.shutdown_event = asyncio.Event()
+                self.logger.debug("🔧 創建新的 shutdown_event")
+        return self.shutdown_event
+    
+    def _get_worker_semaphore(self):
+        """安全獲取 worker_semaphore，確保在正確的事件循環中創建"""
+        if self.worker_semaphore is None:
+            try:
+                # 獲取當前事件循環
+                current_loop = asyncio.get_running_loop()
+                self.worker_semaphore = asyncio.Semaphore(self.current_workers)
+                self.logger.debug(f"🔧 在當前事件循環中創建 worker_semaphore ({self.current_workers})")
+            except RuntimeError:
+                # 沒有運行中的事件循環，創建新的 Semaphore
+                self.worker_semaphore = asyncio.Semaphore(self.current_workers)
+                self.logger.debug(f"🔧 創建新的 worker_semaphore ({self.current_workers})")
+        return self.worker_semaphore
     
     def set_message_sender(self, sender: Callable):
         """設置訊息發送器函數"""
@@ -162,7 +190,7 @@ class AsyncMessageQueue:
             return
         
         self.is_running = True
-        self.shutdown_event.clear()
+        self._get_shutdown_event().clear()
         
         # 啟動工作者
         for i in range(self.current_workers):
@@ -181,7 +209,7 @@ class AsyncMessageQueue:
         self.logger.info("🛑 正在停止異步訊息佇列系統...")
         
         self.is_running = False
-        self.shutdown_event.set()
+        self._get_shutdown_event().set()
         
         # 等待所有工作者完成
         if self.workers:
@@ -402,7 +430,7 @@ class AsyncMessageQueue:
                     continue
                 
                 # 併發控制
-                async with self.worker_semaphore:
+                async with self._get_worker_semaphore():
                     await self._process_message(message, worker_name)
                 
             except asyncio.CancelledError:
@@ -540,7 +568,15 @@ class AsyncMessageQueue:
             self.current_workers = new_workers
             
             # 更新 Semaphore（創建新的，因為 asyncio.Semaphore 不支援動態調整）
-            self.worker_semaphore = asyncio.Semaphore(new_workers)
+            try:
+                # 獲取當前事件循環
+                current_loop = asyncio.get_running_loop()
+                self.worker_semaphore = asyncio.Semaphore(new_workers)
+                self.logger.debug(f"🔧 在當前事件循環中重建 worker_semaphore ({new_workers})")
+            except RuntimeError:
+                # 沒有運行中的事件循環，創建新的 Semaphore
+                self.worker_semaphore = asyncio.Semaphore(new_workers)
+                self.logger.debug(f"🔧 重建 worker_semaphore ({new_workers})")
             
             self.last_adjustment_time = current_time
             self.stats["worker_adjustments"] += 1

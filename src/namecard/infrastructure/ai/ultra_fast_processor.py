@@ -183,13 +183,11 @@ class UltraFastProcessor:
                 time.time() - overall_start, optimizations
             )
             
-            await asyncio.gather(stats_task, perf_task)
+            # 一次性執行並收集結果
+            stats_result, performance_grade = await asyncio.gather(stats_task, perf_task)
             
             post_time = time.time() - post_start
             total_time = time.time() - overall_start
-            
-            # === 結果組裝 ===
-            performance_grade = await perf_task
             
             # 計算節省的時間 (與傳統方式對比)
             estimated_traditional_time = 35.0  # 傳統方式平均時間

@@ -7,6 +7,7 @@ Telegram Bot API 錯誤處理包裝器 - 優化版本
 import asyncio
 import logging
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Union
 
@@ -92,8 +93,8 @@ class TelegramBotHandler:
             # 🚀 創建優化的 HTTP 客戶端 - 修復連接池超時問題
             self._http_client = httpx.AsyncClient(
                 limits=httpx.Limits(
-                    max_keepalive_connections=60,  # 增加到 60 個保持連接
-                    max_connections=150,           # 增加到 150 個總連接數
+                    max_keepalive_connections=30,  # 調整為 30 個保持連接，與 Semaphore 匹配
+                    max_connections=80,            # 調整為 80 個總連接數，保留緩衝
                     keepalive_expiry=90.0,        # 延長連接保持時間到 90 秒
                 ),
                 timeout=httpx.Timeout(
@@ -142,8 +143,8 @@ class TelegramBotHandler:
             # 🚀 創建優化的 HTTP 客戶端 - 修復連接池超時問題
             self._http_client = httpx.AsyncClient(
                 limits=httpx.Limits(
-                    max_keepalive_connections=60,  # 增加到 60 個保持連接
-                    max_connections=150,           # 增加到 150 個總連接數
+                    max_keepalive_connections=30,  # 調整為 30 個保持連接，與 Semaphore 匹配
+                    max_connections=80,            # 調整為 80 個總連接數，保留緩衝
                     keepalive_expiry=90.0,        # 延長連接保持時間到 90 秒
                 ),
                 timeout=httpx.Timeout(
@@ -176,16 +177,16 @@ class TelegramBotHandler:
                 self._semaphore._loop != current_loop):
                 
                 self.logger.debug("創建新的 Semaphore 用於當前事件循環")
-                # 🚀 優化併發控制 - 增加到 25 更好利用連接池
-                self._semaphore = asyncio.Semaphore(25)  # 從 15 增加到 25
+                # 🚀 優化併發控制 - 調整為 15，與連接池大小匹配
+                self._semaphore = asyncio.Semaphore(15)  # 減少到 15，避免連接池耗盡
                 
             return self._semaphore
             
         except RuntimeError:
             # 沒有運行中的事件循環，創建一個新的 Semaphore
             self.logger.debug("沒有運行中的事件循環，創建新的 Semaphore")
-            # 🚀 優化併發控制 - 增加到 25 更好利用連接池
-            self._semaphore = asyncio.Semaphore(25)  # 從 15 增加到 25
+            # 🚀 優化併發控制 - 調整為 15，與連接池大小匹配
+            self._semaphore = asyncio.Semaphore(15)  # 減少到 15，避免連接池耗盡
             return self._semaphore
 
     def _check_rate_limit(self):
@@ -479,8 +480,32 @@ class TelegramBotHandler:
                 await self.bot.shutdown()
                 self.logger.debug("✅ Telegram Bot 已關閉")
                 
+            # 重置狀態
+            self._http_client = None
+            self.bot = None
+            self._semaphore = None
+            
         except Exception as e:
             self.logger.warning(f"⚠️ 清理資源時發生錯誤: {e}")
+    
+    async def cleanup_connection_pool_safe(self):
+        """安全的連接池清理，確保資源正確釋放"""
+        try:
+            # 使用上下文管理器確保資源正確清理
+            async with self._connection_cleanup_context():
+                await self._cleanup_connection_pool()
+        except Exception as e:
+            self.logger.error(f"❌ 安全連接池清理失敗: {e}")
+    
+    @asynccontextmanager
+    async def _connection_cleanup_context(self):
+        """連接池清理上下文管理器"""
+        try:
+            yield
+        finally:
+            # 確保清理狀態被重置
+            if hasattr(self, '_connection_pool_stats'):
+                self._connection_pool_stats["last_cleanup"] = time.time()
             
     async def __aenter__(self):
         """異步上下文管理器進入"""
