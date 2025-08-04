@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'main.py'
-      - 'telegram_main.py'
-      - 'telegram_app.py'
-      - 'telegram_bot_handler.py'
-      - 'requirements-telegram.txt'
+      - 'src/namecard/api/telegram_bot/**'
+      - 'src/namecard/infrastructure/**'
+      - 'src/namecard/core/**'
+      - 'requirements.txt'
       - 'zeabur.json'
+      - 'simple_config.py'
       - '.github/workflows/deploy-telegram-zeabur.yml'
   workflow_dispatch:
 
@@ -40,7 +40,7 @@ jobs:
         echo "📋 檢查部署配置文件..."
         
         # 檢查關鍵文件
-        files=("main.py" "telegram_main.py" "telegram_app.py" "requirements-telegram.txt" "zeabur.json")
+        files=("src/namecard/api/telegram_bot/main.py" "simple_config.py" "requirements.txt" "zeabur.json")
         for file in "${files[@]}"; do
           if [[ -f "$file" ]]; then
             echo "✅ $file 存在"
