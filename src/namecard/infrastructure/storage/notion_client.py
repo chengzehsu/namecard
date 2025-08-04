@@ -95,15 +95,17 @@ class NotionManager:
                     "rich_text": [{"text": {"content": f"格式待確認: {email}"}}]
                 }
 
-        # 電話 (phone_number 類型) - 需要非空驗證
+        # 電話 (phone_number 類型) - 支援多個號碼
         if card_data.get("phone"):
             phone_text = card_data["phone"]
             if isinstance(phone_text, list):
-                phone_text = phone_text[0] if phone_text else ""  # 取第一個電話號碼
-
+                # 如果是陣列，合併為字串
+                phone_text = ", ".join([str(p).strip() for p in phone_text if p and str(p).strip()])
+            
             # 確保電話號碼不為空且格式合理
             if phone_text and phone_text.strip():
                 phone_text = phone_text.strip()
+                # Notion phone_number 欄位支援多個號碼用逗號分隔
                 properties["電話"] = {"phone_number": phone_text}
             else:
                 # 如果電話為空，創建一個占位符

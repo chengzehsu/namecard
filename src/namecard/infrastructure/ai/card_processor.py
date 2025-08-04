@@ -162,10 +162,10 @@ class NameCardProcessor:
         - `title` (職稱): 職位名稱
         - `decision_influence` (決策影響力): 根據職稱推斷 (高/中/低)
         - `email` (Email): 電子郵件地址
-        - `phone` (電話): 電話號碼，轉換為 E.164 格式 (+886...)
+        - `phone` (電話): 包含所有電話和手機號碼，多個號碼用逗號分隔，轉換為 E.164 格式 (+886...)
         - `address` (地址): 公司地址或聯絡地址
         - `contact_source` (取得聯繫來源): 設為 "名片交換"
-        - `notes` (聯繫注意事項): 任何特殊備註或補充資訊
+        - `notes` (聯繫注意事項): 任何特殊備註、補充資訊，**如果有傳真號碼請寫在這裡**
 
         **品質評估規則:**
         - `confidence_score`: 0.0-1.0，表示整張名片識別的信心度
@@ -191,10 +191,10 @@ class NameCardProcessor:
               "title": "經理",
               "decision_influence": "中",
               "email": "example@abc.com",
-              "phone": "+886912345678",
+              "phone": "+886912345678, +886223456789",
               "address": "台北市信義區...",
               "contact_source": "名片交換",
-              "notes": null,
+              "notes": "傳真: +886223456780",
               "field_confidence": {
                 "name": 0.9,
                 "company": 0.8,
@@ -213,6 +213,11 @@ class NameCardProcessor:
         2. confidence_score 基於文字清晰度、完整性評估
         3. 如果只有一張名片，card_count = 1
         4. 輸出必須是有效的 JSON
+        5. **電話號碼處理規則**:
+           - 所有電話、手機、行動電話都放在 `phone` 欄位
+           - 多個號碼用逗號和空格分隔，例如: "+886912345678, +886223456789"
+           - **傳真號碼不要放在 phone 欄位，而是放在 notes 欄位**
+           - 在 notes 中標明，例如: "傳真: +886223456789"
 
         JSON 輸出:
         """
