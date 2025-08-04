@@ -288,10 +288,15 @@ async def handle_photo_message(
             session_info = batch_manager.get_session_info(user_id)
             current_count = session_info["total_count"] + 1 if session_info else 1
             processing_message = (
-                f"📸 批次模式 - 正在處理第 {current_count} 張名片，請稍候..."
+                f"📸 批次模式 - 正在處理第 {current_count} 張名片，請稍候...\n"
+                f"⏱️ 預計需要 30-60 秒完成處理"
             )
         else:
-            processing_message = "📸 收到名片圖片！正在使用 AI 識別中，請稍候..."
+            processing_message = (
+                "📸 收到名片圖片！正在使用 AI 識別中，請稍候...\n"
+                "⏱️ 預計需要 30-60 秒完成處理\n"
+                "🤖 使用 Google Gemini AI + 多名片檢測"
+            )
 
         await telegram_bot_handler.safe_send_message(chat_id, processing_message)
 
@@ -642,11 +647,40 @@ def telegram_webhook():
                         log_message(f"完整錯誤堆疊: {traceback.format_exc()}", "ERROR")
                         traceback.print_exc()
                         
-                        # 嘗試發送錯誤訊息給用戶
+                        # 嘗試發送更詳細的錯誤訊息給用戶
                         try:
                             if hasattr(update, 'effective_chat') and update.effective_chat:
                                 chat_id = update.effective_chat.id
-                                error_msg = "❌ 處理過程中發生錯誤，請稍後重試或聯繫管理員。"
+                                
+                                # 根據錯誤類型提供具體的錯誤訊息
+                                error_str = str(inner_e).lower()
+                                if "timeout" in error_str:
+                                    error_msg = (
+                                        "⏰ 處理超時，請稍後重試\n\n"
+                                        "💡 建議：\n"
+                                        "• 上傳較小的圖片 (<5MB)\n"
+                                        "• 確保圖片清晰度適中\n"
+                                        "• 稍等 1-2 分鐘後重試"
+                                    )
+                                elif "memory" in error_str:
+                                    error_msg = (
+                                        "💾 圖片太大，請上傳較小的圖片\n\n"
+                                        "💡 建議圖片規格：\n"
+                                        "• 檔案大小 < 5MB\n"
+                                        "• 解析度 < 4096x4096\n"
+                                        "• 格式：JPG/PNG"
+                                    )
+                                elif "api" in error_str or "key" in error_str:
+                                    error_msg = (
+                                        "🔑 AI 服務暫時不可用\n\n"
+                                        "請稍後重試，或聯繫管理員"
+                                    )
+                                else:
+                                    error_msg = (
+                                        f"❌ 處理過程中發生錯誤\n\n"
+                                        f"🔍 錯誤類型: {type(inner_e).__name__}\n"
+                                        f"📞 如問題持續，請聯繫管理員"
+                                    )
                                 
                                 # 使用 Bot API 直接發送錯誤訊息
                                 import requests
@@ -655,7 +689,7 @@ def telegram_webhook():
                                     json={"chat_id": chat_id, "text": error_msg},
                                     timeout=5
                                 )
-                                log_message(f"📤 已發送錯誤訊息給用戶 {chat_id}")
+                                log_message(f"📤 已發送具體錯誤訊息給用戶 {chat_id}")
                         except Exception as send_error:
                             log_message(f"❌ 無法發送錯誤訊息: {send_error}", "ERROR")
 
@@ -666,13 +700,15 @@ def telegram_webhook():
                 import traceback
                 traceback.print_exc()
 
-        # 在後台線程中處理更新
-        thread = threading.Thread(target=run_async_update, args=(update,))
-        thread.daemon = False  # 改為非 daemon 線程，確保處理完成
-        thread.start()
-        
         # 立即返回給 Telegram，避免 webhook 超時
         # 實際處理在後台進行，錯誤會直接發送給用戶
+        log_message("⚡ 立即回應 Telegram webhook，開始後台處理")
+        
+        # 在後台線程中處理更新
+        thread = threading.Thread(target=run_async_update, args=(update,))
+        thread.daemon = False  # 確保處理完成
+        thread.start()
+        
         return "OK", 200
 
     except Exception as e:
