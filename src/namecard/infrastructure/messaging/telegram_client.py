@@ -49,7 +49,13 @@ class TelegramBotHandler:
         self.max_retries = 3
         self.base_retry_delay = 1
         
-        # 並發控制（最多同時 10 個請求）- 延遲初始化，解決連接池問題
+        # 請求監控和速率限制
+        self._request_count = 0
+        self._last_request_time = 0
+        self._rate_limit_window = 60  # 60秒窗口
+        self._max_requests_per_minute = 60  # 每分鐘最多60個請求，支援批次處理
+        
+        # 並發控制（最多同時 20 個請求）- 支援批次處理 20 張名片
         self._semaphore = None
         self._semaphore_lock = None
         
@@ -63,18 +69,18 @@ class TelegramBotHandler:
             import httpx
             from telegram.ext import ExtBot
             
-            # 創建優化的 HTTP 客戶端
+            # 創建優化的 HTTP 客戶端 - 支援批次處理 20 張名片
             self._http_client = httpx.AsyncClient(
                 limits=httpx.Limits(
-                    max_keepalive_connections=20,  # 增加保持連接數
-                    max_connections=50,            # 增加總連接數
+                    max_keepalive_connections=40,  # 大幅增加保持連接數
+                    max_connections=100,           # 大幅增加總連接數
                     keepalive_expiry=30.0,        # 連接保持時間
                 ),
                 timeout=httpx.Timeout(
-                    connect=10.0,    # 連接超時
-                    read=30.0,       # 讀取超時
-                    write=10.0,      # 寫入超時
-                    pool=60.0        # 連接池超時
+                    connect=15.0,    # 連接超時 (增加)
+                    read=45.0,       # 讀取超時 (增加，適應 AI 處理時間)
+                    write=15.0,      # 寫入超時 (增加)
+                    pool=120.0       # 連接池超時 (大幅增加，支援批次處理)
                 ),
                 http2=False  # 暫時關閉 HTTP/2，避免兼容性問題
             )
@@ -116,17 +122,37 @@ class TelegramBotHandler:
                 self._semaphore._loop != current_loop):
                 
                 self.logger.debug("創建新的 Semaphore 用於當前事件循環")
-                # 🔧 增加併發數量以支援更多同時請求
-                self._semaphore = asyncio.Semaphore(10)
+                # 🔧 大幅增加併發數量以支援批次處理 20 張名片
+                self._semaphore = asyncio.Semaphore(20)
                 
             return self._semaphore
             
         except RuntimeError:
             # 沒有運行中的事件循環，創建一個新的 Semaphore
             self.logger.debug("沒有運行中的事件循環，創建新的 Semaphore")
-            # 🔧 增加併發數量以支援更多同時請求
-            self._semaphore = asyncio.Semaphore(10)
+            # 🔧 大幅增加併發數量以支援批次處理 20 張名片
+            self._semaphore = asyncio.Semaphore(20)
             return self._semaphore
+
+    def _check_rate_limit(self):
+        """檢查是否超過速率限制"""
+        import time
+        current_time = time.time()
+        
+        # 重置窗口
+        if current_time - self._last_request_time > self._rate_limit_window:
+            self._request_count = 0
+            self._last_request_time = current_time
+        
+        # 檢查是否超過限制
+        if self._request_count >= self._max_requests_per_minute:
+            wait_time = self._rate_limit_window - (current_time - self._last_request_time)
+            self.logger.warning(f"⚠️ 達到速率限制，需等待 {wait_time:.1f} 秒")
+            return False, wait_time
+        
+        # 更新計數
+        self._request_count += 1
+        return True, 0
 
     def _log_error(self, error_type: str, error: Exception, context: str = ""):
         """記錄錯誤並更新統計"""
@@ -200,6 +226,17 @@ class TelegramBotHandler:
         max_retries: int = 3,
     ) -> Dict[str, Any]:
         """安全發送訊息，包含錯誤處理和重試機制"""
+
+        # 🔧 檢查速率限制
+        can_proceed, wait_time = self._check_rate_limit()
+        if not can_proceed:
+            return {
+                "success": False,
+                "error_type": "rate_limit",
+                "message": f"達到速率限制，請等待 {wait_time:.1f} 秒後重試",
+                "can_retry": True,
+                "retry_after": wait_time
+            }
 
         # 🔧 安全獲取 Semaphore，確保在正確的事件循環中
         semaphore = await self._get_semaphore()
