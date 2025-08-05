@@ -90,23 +90,23 @@ class TelegramBotHandler:
             import httpx
             from telegram.ext import ExtBot
             
-            # 🚀 創建優化的 HTTP 客戶端 - 修復連接池超時問題
+            # 🚀 Phase 3: 優化連接池配置 - 大幅提升批次處理能力
             self._http_client = httpx.AsyncClient(
                 limits=httpx.Limits(
-                    max_keepalive_connections=30,  # 調整為 30 個保持連接，與 Semaphore 匹配
-                    max_connections=80,            # 調整為 80 個總連接數，保留緩衝
-                    keepalive_expiry=90.0,        # 延長連接保持時間到 90 秒
+                    max_keepalive_connections=60,  # 🔥 翻倍到 60 個保持連接，支援批次處理
+                    max_connections=150,           # 🔥 增加到 150 個總連接數，支援高並發
+                    keepalive_expiry=120.0,       # 延長連接保持時間到 120 秒
                 ),
                 timeout=httpx.Timeout(
-                    connect=20.0,    # 增加連接超時到 20 秒
-                    read=60.0,       # 增加讀取超時到 60 秒 (AI 處理)
-                    write=20.0,      # 增加寫入超時到 20 秒
-                    pool=300.0       # 🔧 關鍵修復：連接池超時增加到 300 秒 (5分鐘)
+                    connect=30.0,    # 增加連接超時到 30 秒（網路環境較差時）
+                    read=90.0,       # 增加讀取超時到 90 秒（批次 AI 處理）
+                    write=30.0,      # 增加寫入超時到 30 秒
+                    pool=600.0       # 🔧 關鍵修復：連接池超時增加到 600 秒 (10分鐘)
                 ),
                 http2=False,  # 關閉 HTTP/2，避免兼容性問題
-                # 🔧 新增：連接池配置優化
+                # 🔧 Phase 3: 增強連接池配置優化
                 transport=httpx.HTTPTransport(
-                    retries=3,       # 傳輸層重試
+                    retries=5,       # 增加傳輸層重試次數
                     verify=True      # SSL 驗證
                 )
             )
@@ -140,23 +140,23 @@ class TelegramBotHandler:
         """🧪 僅設置 HTTP 客戶端（測試模式用）"""
         try:
             import httpx
-            # 🚀 創建優化的 HTTP 客戶端 - 修復連接池超時問題
+            # 🚀 Phase 3: 優化連接池配置 - 大幅提升批次處理能力（測試模式）
             self._http_client = httpx.AsyncClient(
                 limits=httpx.Limits(
-                    max_keepalive_connections=30,  # 調整為 30 個保持連接，與 Semaphore 匹配
-                    max_connections=80,            # 調整為 80 個總連接數，保留緩衝
-                    keepalive_expiry=90.0,        # 延長連接保持時間到 90 秒
+                    max_keepalive_connections=60,  # 🔥 翻倍到 60 個保持連接，支援批次處理
+                    max_connections=150,           # 🔥 增加到 150 個總連接數，支援高並發
+                    keepalive_expiry=120.0,       # 延長連接保持時間到 120 秒
                 ),
                 timeout=httpx.Timeout(
-                    connect=20.0,    # 增加連接超時到 20 秒
-                    read=60.0,       # 增加讀取超時到 60 秒 (AI 處理)
-                    write=20.0,      # 增加寫入超時到 20 秒
-                    pool=300.0       # 🔧 關鍵修復：連接池超時增加到 300 秒 (5分鐘)
+                    connect=30.0,    # 增加連接超時到 30 秒（網路環境較差時）
+                    read=90.0,       # 增加讀取超時到 90 秒（批次 AI 處理）
+                    write=30.0,      # 增加寫入超時到 30 秒
+                    pool=600.0       # 🔧 關鍵修復：連接池超時增加到 600 秒 (10分鐘)
                 ),
                 http2=False,  # 關閉 HTTP/2，避免兼容性問題
-                # 🔧 新增：連接池配置優化
+                # 🔧 Phase 3: 增強連接池配置優化（測試模式）
                 transport=httpx.HTTPTransport(
-                    retries=3,       # 傳輸層重試
+                    retries=5,       # 增加傳輸層重試次數
                     verify=True      # SSL 驗證
                 )
             )
@@ -177,8 +177,8 @@ class TelegramBotHandler:
                 self._semaphore._loop != current_loop):
                 
                 self.logger.debug("創建新的 Semaphore 用於當前事件循環")
-                # 🚀 優化併發控制 - 調整為 15，與連接池大小匹配
-                self._semaphore = asyncio.Semaphore(15)  # 減少到 15，避免連接池耗盡
+                # 🚀 Phase 3: 優化併發控制 - 調整為 30，與新連接池大小匹配
+                self._semaphore = asyncio.Semaphore(30)  # 增加到 30，匹配 60 個保持連接的一半
                 
             return self._semaphore
             
@@ -501,6 +501,144 @@ class TelegramBotHandler:
         except Exception as e:
             self.logger.warning(f"⚠️ 清理資源時發生錯誤: {e}")
     
+    async def get_connection_pool_metrics(self) -> Dict[str, Any]:
+        """🚀 Phase 3: 增強連接池監控 - 獲取詳細的連接池指標"""
+        try:
+            metrics = {
+                "timestamp": time.time(),
+                "pool_stats": self._connection_pool_stats.copy(),
+                "error_stats": self.error_stats.copy(),
+                "client_info": {}
+            }
+            
+            # 獲取 HTTP 客戶端詳細信息
+            if hasattr(self, '_http_client') and self._http_client:
+                try:
+                    client = self._http_client
+                    if hasattr(client, '_transport'):
+                        transport = client._transport
+                        
+                        # 嘗試獲取連接池使用情況
+                        if hasattr(transport, '_pool'):
+                            pool = transport._pool
+                            
+                            # 收集連接池詳細資訊
+                            pool_info = {
+                                "pool_type": str(type(pool).__name__),
+                                "available_connections": getattr(pool, '_available_connections', 'unknown'),
+                                "active_connections": getattr(pool, '_active_connections', 'unknown'),
+                                "max_connections": getattr(pool, '_max_connections', 'unknown'),
+                                "keepalive_connections": getattr(pool, '_keepalive_connections', 'unknown')
+                            }
+                            
+                            # 嘗試獲取數值型統計
+                            try:
+                                if hasattr(pool, 'get_connection_info'):
+                                    pool_info.update(pool.get_connection_info())
+                            except Exception:
+                                pass
+                                
+                            metrics["client_info"]["connection_pool"] = pool_info
+                            
+                        # 獲取客戶端設定
+                        if hasattr(client, '_limits'):
+                            limits = client._limits
+                            metrics["client_info"]["limits"] = {
+                                "max_keepalive_connections": getattr(limits, 'max_keepalive_connections', 'unknown'),
+                                "max_connections": getattr(limits, 'max_connections', 'unknown'),
+                                "keepalive_expiry": getattr(limits, 'keepalive_expiry', 'unknown')
+                            }
+                            
+                        if hasattr(client, '_timeout'):
+                            timeout = client._timeout
+                            metrics["client_info"]["timeout"] = {
+                                "connect": getattr(timeout, 'connect', 'unknown'),
+                                "read": getattr(timeout, 'read', 'unknown'),
+                                "write": getattr(timeout, 'write', 'unknown'),
+                                "pool": getattr(timeout, 'pool', 'unknown')
+                            }
+                            
+                except Exception as client_error:
+                    metrics["client_info"]["error"] = str(client_error)
+            
+            # 計算健康度指標
+            total_requests = sum(self.error_stats.values()) + self._connection_pool_stats.get("successful_requests", 0)
+            success_rate = 1.0
+            if total_requests > 0:
+                failed_requests = sum(self.error_stats.values())
+                success_rate = (total_requests - failed_requests) / total_requests
+            
+            metrics["health_indicators"] = {
+                "success_rate": round(success_rate, 3),
+                "total_requests": total_requests,
+                "pool_timeout_rate": (
+                    self._connection_pool_stats["pool_timeouts"] / max(1, total_requests)
+                    if total_requests > 0 else 0
+                ),
+                "cleanup_frequency": (
+                    time.time() - self._connection_pool_stats.get("last_cleanup", time.time())
+                ) / 60,  # 分鐘
+                "overall_status": self.get_health_status()["status"]
+            }
+            
+            return metrics
+            
+        except Exception as e:
+            self.logger.error(f"❌ 獲取連接池指標時發生錯誤: {e}")
+            return {
+                "error": str(e),
+                "timestamp": time.time(),
+                "status": "error"
+            }
+    
+    async def auto_cleanup_if_needed(self):
+        """🚀 Phase 3: 智能連接池自動清理 - 根據使用情況自動判斷是否需要清理"""
+        try:
+            # 獲取當前健康狀態
+            health = self.get_health_status()
+            
+            # 判斷是否需要清理
+            needs_cleanup = False
+            reasons = []
+            
+            # 條件 1: 池超時比例過高
+            if health["pool_timeout_ratio"] > 0.2:
+                needs_cleanup = True
+                reasons.append(f"池超時比例過高 ({health['pool_timeout_ratio']:.2%})")
+            
+            # 條件 2: 總錯誤數過多
+            if health["total_errors"] > 25:
+                needs_cleanup = True
+                reasons.append(f"錯誤總數過多 ({health['total_errors']})")
+            
+            # 條件 3: 系統狀態不健康
+            if health["status"] == "unhealthy":
+                needs_cleanup = True
+                reasons.append("系統狀態不健康")
+            
+            # 條件 4: 連續池超時
+            recent_pool_timeouts = self._connection_pool_stats.get("pool_timeouts", 0)
+            if recent_pool_timeouts >= 5:
+                needs_cleanup = True
+                reasons.append(f"連續池超時 ({recent_pool_timeouts} 次)")
+            
+            if needs_cleanup:
+                self.logger.warning(f"🚨 觸發自動清理：{'; '.join(reasons)}")
+                await self._cleanup_connection_pool()
+                
+                # 重置某些統計以避免過度清理
+                self._connection_pool_stats["pool_timeouts"] = 0
+                self.error_stats = {key: 0 for key in self.error_stats}
+                
+                return True
+            else:
+                self.logger.debug("✅ 連接池狀態良好，無需清理")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ 自動清理檢查失敗: {e}")
+            return False
+
     async def cleanup_connection_pool_safe(self):
         """安全的連接池清理，確保資源正確釋放"""
         try:

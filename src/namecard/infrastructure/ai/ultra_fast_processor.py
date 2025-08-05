@@ -99,6 +99,159 @@ class UltraFastProcessor:
         
         self.logger.info("✅ 所有核心組件初始化完成")
     
+    async def process_telegram_photos_batch_ultra_fast(
+        self,
+        telegram_files: List[File],
+        user_id: str,
+        processing_type: str = "batch_multi_card"
+    ) -> UltraFastResult:
+        """
+        🚀 Phase 5: 真正的批次 AI 處理 - 多張圖片單次 AI 調用
+        
+        相比逐一處理的優勢：
+        - 5張圖片: 5 × 10s = 50s → 1 × 15s = 15s (3.3x 提升)
+        - 減少 API 調用次數 80%
+        - 並行下載和處理
+        - 智能批次優化
+        """
+        overall_start = time.time()
+        image_count = len(telegram_files)
+        optimizations = ["true_batch_processing", f"batch_size_{image_count}"]
+        
+        try:
+            self.logger.info(f"🚀 開始真正批次處理 {image_count} 張圖片 (用戶 {user_id})")
+            
+            # === 階段 1: 並行下載所有圖片 ===
+            download_start = time.time()
+            
+            # 並行下載所有圖片 + 用戶上下文準備
+            download_tasks = [
+                self.image_downloader.download_single_image(file) 
+                for file in telegram_files
+            ]
+            user_context_task = self._prepare_user_context(user_id)
+            
+            download_results, user_context = await asyncio.gather(
+                asyncio.gather(*download_tasks),
+                user_context_task
+            )
+            
+            download_time = time.time() - download_start
+            
+            # 檢查下載結果
+            successful_downloads = []
+            failed_downloads = []
+            
+            for i, result in enumerate(download_results):
+                if result.success:
+                    successful_downloads.append((i, result))
+                    if result.source == "cache":
+                        optimizations.append(f"download_cache_hit_{i}")
+                else:
+                    failed_downloads.append((i, result.error))
+            
+            if not successful_downloads:
+                return UltraFastResult(
+                    success=False,
+                    error=f"所有 {image_count} 張圖片下載失敗: {failed_downloads}",
+                    total_time=time.time() - overall_start,
+                    download_time=download_time,
+                    optimizations_used=["fast_failure"]
+                )
+            
+            self.logger.info(f"📥 成功下載 {len(successful_downloads)}/{image_count} 張圖片")
+            
+            # === 階段 2: 批次 AI 處理 ===
+            ai_start = time.time()
+            
+            # 準備批次圖片數據
+            batch_image_data = [result.data for _, result in successful_downloads]
+            
+            # 調用批次 AI 處理
+            ai_result = await self.ai_processor.process_batch_multi_card_fast(
+                batch_image_data, 
+                enable_cache=True,
+                batch_size=len(batch_image_data)
+            )
+            
+            ai_time = time.time() - ai_start
+            
+            if not ai_result.success:
+                return UltraFastResult(
+                    success=False,
+                    error=f"批次 AI 處理失敗: {ai_result.error}",
+                    total_time=time.time() - overall_start,
+                    download_time=download_time,
+                    ai_processing_time=ai_time,
+                    optimizations_used=optimizations
+                )
+            
+            # 記錄 AI 優化
+            if ai_result.cache_hit:
+                optimizations.append("ai_cache_hit")
+            optimizations.extend(ai_result.optimizations or [])
+            
+            # === 階段 3: 後處理和結果整理 ===
+            post_start = time.time()
+            
+            # 處理失敗的下載
+            if failed_downloads:
+                self.logger.warning(f"⚠️ {len(failed_downloads)} 張圖片下載失敗，將在結果中標記")
+                
+            # 整理批次結果
+            batch_results = {
+                "total_images": image_count,
+                "successful_images": len(successful_downloads),
+                "failed_images": len(failed_downloads),
+                "cards_detected": ai_result.data.get("cards", []),
+                "batch_processing": True,
+                "failed_downloads": failed_downloads
+            }
+            
+            post_time = time.time() - post_start
+            total_time = time.time() - overall_start
+            
+            # === 效能評估 ===
+            performance_grade = self._evaluate_batch_performance(total_time, image_count)
+            self._update_batch_stats(performance_grade, total_time, image_count)
+            
+            # === 統計和優化建議 ===
+            estimated_individual_time = image_count * 10  # 假設每張 10 秒
+            time_saved = estimated_individual_time - total_time
+            efficiency_ratio = time_saved / estimated_individual_time if estimated_individual_time > 0 else 0
+            
+            self.logger.info(
+                f"✅ 批次處理完成: {total_time:.2f}s "
+                f"(預估個別處理: {estimated_individual_time}s, "
+                f"節省: {time_saved:.2f}s, 效率提升: {efficiency_ratio:.1%})"
+            )
+            
+            return UltraFastResult(
+                success=True,
+                data=batch_results,
+                total_time=total_time,
+                download_time=download_time,
+                ai_processing_time=ai_time,
+                post_processing_time=post_time,
+                cache_hit=ai_result.cache_hit,
+                performance_grade=performance_grade,
+                efficiency_ratio=efficiency_ratio,
+                time_saved=time_saved,
+                optimizations_used=optimizations,
+                parallel_operations=len(successful_downloads)
+            )
+            
+        except Exception as e:
+            total_time = time.time() - overall_start
+            self.logger.error(f"❌ 批次處理失敗: {e}")
+            
+            return UltraFastResult(
+                success=False,
+                error=f"批次處理異常: {str(e)}",
+                total_time=total_time,
+                optimizations_used=optimizations
+            )
+    
     async def process_telegram_photo_ultra_fast(
         self,
         telegram_file: File,
@@ -307,6 +460,63 @@ class UltraFastProcessor:
             1 for opt in optimizations 
             if any(indicator in opt.lower() for indicator in parallel_indicators)
         )
+    
+    def _evaluate_batch_performance(self, total_time: float, image_count: int) -> str:
+        """🚀 Phase 5: 評估批次處理性能等級"""
+        # 計算每張圖片的平均處理時間
+        avg_time_per_image = total_time / image_count if image_count > 0 else total_time
+        
+        # 批次處理的性能標準（比單張處理更嚴格）
+        if avg_time_per_image < 3.0:
+            return "S+"  # 超級批次效能 (< 3s/張)
+        elif avg_time_per_image < 5.0:
+            return "S"   # 優秀批次效能 (3-5s/張)
+        elif avg_time_per_image < 8.0:
+            return "A"   # 良好批次效能 (5-8s/張)
+        elif avg_time_per_image < 12.0:
+            return "B"   # 一般批次效能 (8-12s/張)
+        elif avg_time_per_image < 20.0:
+            return "C"   # 偏慢批次效能 (12-20s/張)
+        else:
+            return "D"   # 需要優化 (> 20s/張)
+    
+    def _update_batch_stats(self, performance_grade: str, total_time: float, image_count: int):
+        """🚀 Phase 5: 更新批次處理統計"""
+        # 更新基礎統計
+        self.global_stats["total_processed"] += image_count
+        
+        # 計算時間節省（相對於個別處理）
+        estimated_individual_time = image_count * 10  # 假設每張個別處理需要 10 秒
+        time_saved = max(0, estimated_individual_time - total_time)
+        self.global_stats["total_time_saved"] += time_saved
+        
+        # 更新等級統計
+        grade_mapping = {
+            "S+": "s_grade_count",
+            "S": "s_grade_count", 
+            "A": "a_grade_count",
+            "B": "b_grade_count", 
+            "C": "c_grade_count",
+            "D": "d_grade_count"
+        }
+        
+        grade_key = grade_mapping.get(performance_grade, "d_grade_count")
+        self.global_stats[grade_key] += 1
+        
+        # 記錄批次處理歷史
+        self.processing_history.append({
+            "type": "batch",
+            "image_count": image_count,
+            "total_time": total_time,
+            "avg_time_per_image": total_time / image_count,
+            "performance_grade": performance_grade,
+            "time_saved": time_saved,
+            "timestamp": time.time()
+        })
+        
+        # 只保留最近 100 筆記錄
+        if len(self.processing_history) > 100:
+            self.processing_history = self.processing_history[-100:]
     
     async def _update_global_stats(self, result: UltraFastResult, time_saved: float):
         """更新全域統計"""

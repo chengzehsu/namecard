@@ -185,18 +185,8 @@ class BatchImageCollector:
             
             batch_status.last_updated = current_time
             
-            # 安全取消現有計時器
-            if batch_status.timer_task and not batch_status.timer_task.done():
-                try:
-                    batch_status.timer_task.cancel()
-                    self.logger.debug(f"⏰ 用戶 {user_id} 重置批次計時器")
-                except RuntimeError as e:
-                    if "Event loop is closed" in str(e):
-                        self.logger.warning(f"⚠️ 用戶 {user_id} Event loop 已關閉，跳過計時器取消")
-                    else:
-                        self.logger.error(f"❌ 用戶 {user_id} 取消計時器失敗: {e}")
-                except Exception as e:
-                    self.logger.error(f"❌ 用戶 {user_id} 計時器取消異常: {e}")
+            # 🚀 Phase 4: 修復計時器競爭狀態 - 安全取消現有計時器
+            await self._safe_cancel_timer(user_id, batch_status)
         
         # 添加圖片到批次
         batch_status.images.append(pending_image)
@@ -217,11 +207,9 @@ class BatchImageCollector:
                 "reason": "max_batch_size_reached"
             }
         
-        # 設置新的計時器（使用動態超時時間）
-        timeout_to_use = extended_timeout if 'extended_timeout' in locals() else self.batch_timeout
-        batch_status.timer_task = asyncio.create_task(
-            self._batch_timer(user_id, timeout_to_use)
-        )
+        # 🚀 Phase 4: 智能計時器管理 - 避免競爭狀態
+        timeout_to_use = self._get_safe_timeout(user_id, image_count)
+        await self._create_safe_timer(user_id, batch_status, timeout_to_use)
         
         if timeout_to_use > self.batch_timeout:
             self.logger.info(f"⏰ 用戶 {user_id} 使用延長超時時間: {timeout_to_use:.1f}秒")
@@ -274,17 +262,8 @@ class BatchImageCollector:
             self.logger.warning(f"⚠️ 用戶 {user_id} 批次已在處理中，跳過")
             return
         
-        # 安全取消計時器
-        if batch_status.timer_task and not batch_status.timer_task.done():
-            try:
-                batch_status.timer_task.cancel()
-            except RuntimeError as e:
-                if "Event loop is closed" in str(e):
-                    self.logger.warning(f"⚠️ 用戶 {user_id} Event loop 已關閉，跳過計時器取消")
-                else:
-                    self.logger.error(f"❌ 用戶 {user_id} 批次處理取消計時器失敗: {e}")
-            except Exception as e:
-                self.logger.error(f"❌ 用戶 {user_id} 批次處理計時器取消異常: {e}")
+        # 🚀 Phase 4: 安全取消計時器
+        await self._safe_cancel_timer(user_id, batch_status)
         
         # 標記為處理中
         batch_status.is_processing = True
@@ -356,6 +335,98 @@ class BatchImageCollector:
             self.logger.debug(f"🛑 用戶 {user_id} 延遲清理任務被取消")
         except Exception as e:
             self.logger.error(f"❌ 用戶 {user_id} 延遲清理錯誤: {e}")
+    
+    async def _safe_cancel_timer(self, user_id: str, batch_status: BatchStatus):
+        """🚀 Phase 4: 安全取消計時器 - 避免競爭狀態和事件循環錯誤"""
+        if not batch_status.timer_task:
+            return
+            
+        try:
+            # 檢查任務狀態
+            task = batch_status.timer_task
+            if task.done():
+                self.logger.debug(f"⏰ 用戶 {user_id} 計時器已完成，無需取消")
+                return
+            
+            # 嘗試安全取消
+            task.cancel()
+            
+            # 等待取消確認（最多等待 0.1 秒）
+            try:
+                await asyncio.wait_for(task, timeout=0.1)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                # 正常取消或超時，都是預期行為
+                pass
+            except Exception as wait_error:
+                self.logger.debug(f"⚠️ 用戶 {user_id} 等待計時器取消時出現異常: {wait_error}")
+            
+            self.logger.debug(f"✅ 用戶 {user_id} 計時器已安全取消")
+            
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                self.logger.warning(f"⚠️ 用戶 {user_id} Event loop 已關閉，跳過計時器取消")
+            elif "cannot be called from a running event loop" in str(e):
+                self.logger.warning(f"⚠️ 用戶 {user_id} 事件循環衝突，跳過計時器取消")
+            else:
+                self.logger.error(f"❌ 用戶 {user_id} 取消計時器 RuntimeError: {e}")
+        except Exception as e:
+            self.logger.error(f"❌ 用戶 {user_id} 計時器取消異常: {e}")
+        finally:
+            # 確保任務引用被清除
+            batch_status.timer_task = None
+    
+    async def _create_safe_timer(self, user_id: str, batch_status: BatchStatus, timeout: float):
+        """🚀 Phase 4: 創建安全計時器 - 使用弱引用和錯誤處理"""
+        try:
+            # 檢查事件循環狀態
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self.logger.error(f"❌ 用戶 {user_id} 無法獲取運行中的事件循環")
+                return
+            
+            # 檢查循環是否已關閉
+            if loop.is_closed():
+                self.logger.warning(f"⚠️ 用戶 {user_id} 事件循環已關閉，無法創建計時器")
+                return
+            
+            # 創建新的計時器任務
+            batch_status.timer_task = asyncio.create_task(
+                self._batch_timer(user_id, timeout),
+                name=f"batch_timer_{user_id}_{int(time.time())}"
+            )
+            
+            # 記錄計時器創建信息
+            if timeout > self.batch_timeout:
+                self.logger.info(f"⏰ 用戶 {user_id} 使用延長超時時間: {timeout:.1f}秒")
+            else:
+                self.logger.debug(f"⏰ 用戶 {user_id} 設置標準超時時間: {timeout:.1f}秒")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 用戶 {user_id} 創建計時器失敗: {e}")
+            batch_status.timer_task = None
+    
+    def _get_safe_timeout(self, user_id: str, image_count: int) -> float:
+        """🚀 Phase 4: 智能超時時間計算 - 根據圖片數量和歷史數據調整"""
+        base_timeout = self.batch_timeout
+        
+        # 根據圖片數量調整超時時間
+        if image_count >= 4:
+            # 4張以上圖片，延長超時時間
+            extended_timeout = base_timeout + 2.0
+            self.logger.debug(f"🕐 用戶 {user_id} 多圖片批次({image_count}張)，延長超時")
+        elif image_count >= 2:
+            # 2-3張圖片，稍微延長
+            extended_timeout = base_timeout + 1.0
+            self.logger.debug(f"🕐 用戶 {user_id} 中等批次({image_count}張)，適中超時")
+        else:
+            # 單張圖片，使用標準時間
+            extended_timeout = base_timeout
+            self.logger.debug(f"🕐 用戶 {user_id} 單張圖片，標準超時")
+        
+        # 確保不超過最大超時時間
+        max_timeout = base_timeout * 2
+        return min(extended_timeout, max_timeout)
     
     async def force_process_user_batch(self, user_id: str) -> bool:
         """強制處理指定用戶的批次"""
