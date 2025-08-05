@@ -169,6 +169,20 @@ class BatchImageCollector:
         else:
             # 現有批次
             batch_status = self.pending_batches[user_id]
+            
+            # 🔧 修復：檢查是否剛處理完批次（圖片列表為空且不在處理中）
+            if len(batch_status.images) == 0 and not batch_status.is_processing:
+                # 剛處理完批次，檢查時間間隔
+                time_since_last_process = current_time - batch_status.last_updated
+                if time_since_last_process < 3.0:  # 3秒內的圖片可能是同一批
+                    self.logger.info(f"🔄 用戶 {user_id} 在處理完成後 {time_since_last_process:.1f}秒內上傳新圖片，延長等待時間")
+                    # 使用較長的超時時間，給更多圖片時間到達
+                    extended_timeout = self.batch_timeout + 2.0
+                else:
+                    extended_timeout = self.batch_timeout
+            else:
+                extended_timeout = self.batch_timeout
+            
             batch_status.last_updated = current_time
             
             # 取消現有計時器
@@ -195,10 +209,14 @@ class BatchImageCollector:
                 "reason": "max_batch_size_reached"
             }
         
-        # 設置新的計時器
+        # 設置新的計時器（使用動態超時時間）
+        timeout_to_use = extended_timeout if 'extended_timeout' in locals() else self.batch_timeout
         batch_status.timer_task = asyncio.create_task(
-            self._batch_timer(user_id, self.batch_timeout)
+            self._batch_timer(user_id, timeout_to_use)
         )
+        
+        if timeout_to_use > self.batch_timeout:
+            self.logger.info(f"⏰ 用戶 {user_id} 使用延長超時時間: {timeout_to_use:.1f}秒")
         
         # 通知進度更新
         if self.progress_notifier:
@@ -285,10 +303,43 @@ class BatchImageCollector:
             self.logger.error(f"批次處理錯誤堆疊: {traceback.format_exc()}")
         
         finally:
-            # 清理批次狀態
+            # ⚠️ 修復：不立即清理批次狀態，而是標記為已處理狀態
+            # 這樣如果有新圖片進來，可以決定是添加到新批次還是延遲處理
             if user_id in self.pending_batches:
-                del self.pending_batches[user_id]
-                self.logger.debug(f"🗑️ 用戶 {user_id} 批次狀態已清理")
+                batch_status = self.pending_batches[user_id]
+                batch_status.is_processing = False
+                batch_status.images = []  # 清空已處理的圖片
+                batch_status.last_updated = time.time()
+                self.logger.debug(f"🔄 用戶 {user_id} 批次處理完成，狀態重置為待收集")
+                
+                # 設置延遲清理任務（5秒後清理，除非有新圖片）
+                asyncio.create_task(self._delayed_cleanup(user_id, 5.0))
+    
+    async def _delayed_cleanup(self, user_id: str, delay: float):
+        """延遲清理批次狀態"""
+        try:
+            await asyncio.sleep(delay)
+            
+            # 檢查是否還在待清理狀態（沒有新圖片且不在處理中）
+            if user_id in self.pending_batches:
+                batch_status = self.pending_batches[user_id]
+                current_time = time.time()
+                time_since_update = current_time - batch_status.last_updated
+                
+                # 如果超過延遲時間且沒有新圖片，則清理
+                if (len(batch_status.images) == 0 and 
+                    not batch_status.is_processing and 
+                    time_since_update >= delay - 0.1):  # 允許小誤差
+                    
+                    del self.pending_batches[user_id]
+                    self.logger.debug(f"🗑️ 用戶 {user_id} 批次狀態延遲清理完成")
+                else:
+                    self.logger.debug(f"🔄 用戶 {user_id} 有新活動，跳過延遲清理")
+                    
+        except asyncio.CancelledError:
+            self.logger.debug(f"🛑 用戶 {user_id} 延遲清理任務被取消")
+        except Exception as e:
+            self.logger.error(f"❌ 用戶 {user_id} 延遲清理錯誤: {e}")
     
     async def force_process_user_batch(self, user_id: str) -> bool:
         """強制處理指定用戶的批次"""
@@ -380,6 +431,8 @@ class BatchImageCollector:
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """異步上下文管理器退出"""
+        # 忽略未使用的參數
+        _ = exc_type, exc_val, exc_tb
         await self.stop()
 
 
