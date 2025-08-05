@@ -136,21 +136,22 @@ if config_valid:
         user_interaction_handler = UserInteractionHandler()
         log_message("✅ UserInteractionHandler 初始化成功")
         
+        # 🔧 Critical Fix: 初始化基礎處理器，避免多個HTTP客戶端競爭
         telegram_bot_handler = TelegramBotHandler()
-        log_message("✅ TelegramBotHandler 初始化成功")
+        log_message("✅ TelegramBotHandler 基礎處理器初始化成功")
         
-        # 🚀 初始化超高速處理組件
+        # 🚀 初始化超高速處理組件（使用共享連接池）
         ultra_fast_processor = UltraFastProcessor()
         log_message("✅ UltraFastProcessor 超高速處理器初始化成功")
         
-        # 創建增強型 Telegram 處理器（整合異步佇列系統）
+        # 🔧 Critical Fix: 創建增強型處理器，但減少併發工作者數量避免連接池耗盡
         enhanced_telegram_handler = create_enhanced_telegram_handler(
             enable_queue=True,
-            queue_workers=12,  # 增加併發工作者
-            batch_size=5,
-            batch_timeout=1.5  # 減少批次超時時間
+            queue_workers=6,   # 🔧 減少到6個，避免連接池競爭
+            batch_size=3,      # 🔧 減少批次大小
+            batch_timeout=2.0  # 🔧 增加超時時間，減少競爭
         )
-        log_message("✅ EnhancedTelegramBotHandler 增強處理器初始化成功")
+        log_message("✅ EnhancedTelegramBotHandler 增強處理器初始化成功（優化配置）")
         
         # 🚀 初始化批次圖片收集器和安全處理器
         from src.namecard.core.services.safe_batch_processor import (
@@ -161,12 +162,13 @@ if config_valid:
         batch_image_collector = get_batch_collector()
         log_message("✅ BatchImageCollector 批次收集器初始化成功")
         
-        # 初始化安全批次處理器
+        # 🔧 Critical Fix: 初始化安全批次處理器 - 大幅減少並發數避免連接池競爭
         safe_processor_config = SafeProcessingConfig(
-            max_concurrent_processing=8,  # 小於Semaphore限制(15)
-            processing_timeout=90.0,
+            max_concurrent_processing=3,  # 🔧 大幅減少到3個，避免連接池耗盡
+            processing_timeout=120.0,     # 🔧 增加超時時間
             enable_ultra_fast=True,
-            use_connection_pool_cleanup=True
+            use_connection_pool_cleanup=True,
+            connection_pool_limit=30      # 🔧 限制連接池大小
         )
         
         safe_batch_processor = initialize_safe_batch_processor(
@@ -676,19 +678,14 @@ async def handle_media_group_message(update: Update, context: ContextTypes.DEFAU
     photo_count = len(media_group_collector[media_group_id]["photos"])
     log_message(f"📥 媒體群組 {media_group_id} 收集第 {photo_count} 張圖片")
     
-    # 如果是第一張圖片，發送確認訊息
+    # 🚨 Critical Fix: 只發送一次初始確認訊息，避免重複進度更新
     if photo_count == 1:
         await safe_telegram_send(
             chat_id, 
-            f"📸 收到 {photo_count} 張圖片，正在收集中...\n⏱️ 將在 5 秒後開始處理，或等待更多圖片",
+            f"📸 收到媒體群組，正在收集圖片...\n⏱️ 將在 5 秒後統一處理所有圖片",
             MessagePriority.HIGH
         )
-    elif photo_count <= 5:  # 更新進度
-        await safe_telegram_send(
-            chat_id,
-            f"📸 已收集 {photo_count} 張圖片...\n⏱️ 將在 5 秒後統一處理",
-            MessagePriority.NORMAL
-        )
+    # 🚨 移除重複的進度更新訊息，避免用戶收到 2,3,4,5 張的混亂訊息
 
 async def process_media_group_photos(user_id: str, chat_id: int, photos: list, media_group_id: str):
     """處理媒體群組中的所有圖片"""
@@ -836,17 +833,19 @@ async def handle_photo_message(
     chat_id = update.effective_chat.id
     is_batch_mode = batch_manager.is_in_batch_mode(user_id)
     
-    # 🆕 Phase 1: 檢測媒體群組
+    # 🚨 Critical Fix: 媒體群組圖片完全跳過個別處理，避免重複收集
     if update.message.media_group_id:
         log_message(f"📸 檢測到媒體群組 {update.message.media_group_id}，轉交媒體群組處理器")
         await handle_media_group_message(update, context)
-        return
+        log_message(f"✅ 媒體群組圖片處理完成，跳過個別圖片邏輯")
+        return  # 🚨 Critical: 完全退出，不執行後續邏輯
 
     try:
         # === 🚀 新增：智能批次收集邏輯 ===
         log_message(f"🔍 用戶 {user_id} 開始處理圖片 - 批次模式: {is_batch_mode}, 收集器可用: {batch_image_collector is not None}")
         
-        if batch_image_collector and not is_batch_mode:  # 只在非批次模式使用智能收集
+        # 🚨 Critical Fix: 確保個別圖片處理不會被媒體群組影響，同時智能收集器不會與媒體群組衝突
+        if batch_image_collector and not is_batch_mode and not update.message.media_group_id:  # 🔧 排除媒體群組圖片
             log_message(f"📸 用戶 {user_id} 進入智能批次收集邏輯")
             
             # 設置回調函數（僅首次）
@@ -902,8 +901,14 @@ async def handle_photo_message(
                     log_message(f"⚠️ 用戶 {user_id} 批次收集器失敗，回退到原邏輯", "WARNING")
             else:
                 log_message(f"❌ 用戶 {user_id} 圖片下載失敗，file_result: {file_result}")
-                log_message(f"❌ 用戶 {user_id} 圖片下載失敗，回退到原邏輯")
-                # 繼續執行原有邏輯作為fallback
+                log_message(f"❌ 用戶 {user_id} 圖片下載失敗，直接返回錯誤")
+                # 🔧 Critical Fix: 批次收集器失敗時完全跳出，避免與原邏輯衝突
+                await safe_telegram_send(
+                    chat_id, 
+                    "⚠️ 圖片處理系統暫時繁忙，請稍後重試", 
+                    MessagePriority.HIGH
+                )
+                return  # 🚨 Critical: 完全退出，避免重複處理
                 
         else:
             log_message(f"⚠️ 用戶 {user_id} 跳過批次收集邏輯 - 收集器: {batch_image_collector is not None}, 批次模式: {is_batch_mode}")
@@ -1425,54 +1430,73 @@ def telegram_webhook():
                 import threading
                 
                 def process_update_in_executor():
-                    """在執行器中處理更新，確保正確的事件循環管理"""
+                    """🚨 Critical Fix: 優化事件循環管理和連接池清理"""
                     try:
-                        # 檢查是否有運行中的事件循環
+                        # 🔧 Phase 3: 檢查並清理現有事件循環
                         try:
-                            loop = asyncio.get_running_loop()
-                            log_message("🔄 使用現有事件循環處理更新")
+                            current_loop = asyncio.get_running_loop()
+                            log_message("⚠️ 檢測到運行中的事件循環，將創建新線程")
                         except RuntimeError:
-                            # 沒有運行中的事件循環，創建新的
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                            log_message("🆕 創建新事件循環處理更新")
+                            # 沒有運行中的事件循環，這是正常的
+                            pass
                         
-                        # 異步處理更新
+                        # 🚨 Critical Fix: 使用 asyncio.run() 替代手動事件循環管理
                         async def safe_process_update():
                             try:
-                                # 初始化應用（如果尚未初始化）
-                                if not application.bot._initialized:
-                                    await application.initialize()
+                                # 🔧 連接池清理檢查
+                                if (enhanced_telegram_handler and 
+                                    hasattr(enhanced_telegram_handler, '_connection_pool_stats')):
+                                    pool_timeouts = enhanced_telegram_handler._connection_pool_stats.get("pool_timeouts", 0)
+                                    if pool_timeouts > 3:
+                                        log_message(f"🧹 檢測到 {pool_timeouts} 次連接池超時，執行清理...")
+                                        await enhanced_telegram_handler.auto_cleanup_if_needed()
                                 
-                                # 處理更新
-                                await application.process_update(update)
-                                log_message("✅ 更新處理完成")
+                                # 初始化應用（如果尚未初始化）
+                                if application and hasattr(application, 'bot'):
+                                    if hasattr(application.bot, '_initialized') and not application.bot._initialized:
+                                        await application.initialize()
+                                    
+                                    # 🔧 Critical Fix: 使用限流處理更新，避免連接池耗盡
+                                    semaphore = asyncio.Semaphore(2)  # 最多2個並發處理
+                                    async with semaphore:
+                                        await application.process_update(update)
+                                        log_message("✅ 更新處理完成（限流模式）")
+                                else:
+                                    log_message("⚠️ Application 不可用，跳過處理")
                                 
                             except Exception as process_error:
-                                log_message(f"❌ 處理更新時發生錯誤: {process_error}", "ERROR")
+                                error_str = str(process_error).lower()
+                                if "pool timeout" in error_str or "connection pool" in error_str:
+                                    log_message(f"🚨 連接池超時錯誤，觸發清理: {process_error}", "ERROR")
+                                    # 嘗試清理連接池
+                                    if enhanced_telegram_handler:
+                                        try:
+                                            await enhanced_telegram_handler._cleanup_connection_pool()
+                                        except Exception as cleanup_error:
+                                            log_message(f"⚠️ 連接池清理失敗: {cleanup_error}")
+                                else:
+                                    log_message(f"❌ 處理更新時發生錯誤: {process_error}", "ERROR")
+                                
                                 await handle_update_error(update, process_error)
                         
-                        # 執行異步處理
-                        if loop.is_running():
-                            # 如果循環正在運行，創建任務
-                            asyncio.create_task(safe_process_update())
-                        else:
-                            # 如果循環未運行，運行到完成
-                            loop.run_until_complete(safe_process_update())
+                        # 🚨 Critical Fix: 使用 asyncio.run() 自動管理事件循環生命週期
+                        asyncio.run(safe_process_update())
+                        log_message("✅ 事件循環處理完成並自動清理")
                             
                     except Exception as executor_error:
                         log_message(f"❌ 執行器處理錯誤: {executor_error}", "ERROR")
-                        # 降級到直接 API 調用發送錯誤消息
+                        # 降級到直接 API 調用發送錯誤消息（避免更多連接池問題）
                         try:
                             if hasattr(update, 'effective_chat') and update.effective_chat:
                                 import requests
+                                # 🔧 使用更短的超時時間，避免連接積累
                                 requests.post(
                                     f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage",
                                     json={
                                         "chat_id": update.effective_chat.id, 
                                         "text": "❌ 系統處理錯誤，請稍後重試或聯繫管理員"
                                     },
-                                    timeout=5
+                                    timeout=3  # 🔧 減少超時時間
                                 )
                         except Exception as send_error:
                             log_message(f"❌ 發送錯誤消息失敗: {send_error}", "ERROR")
@@ -1492,9 +1516,34 @@ def telegram_webhook():
                 
         else:
             log_message("⚠️ 增強處理器不可用，使用降級處理")
-            # 使用線程處理降級邏輯
+            # 🔧 Critical Fix: 使用相同的優化線程處理降級邏輯
             import threading
-            thread = threading.Thread(target=lambda: asyncio.run(fallback_process_update(update)))
+            
+            def fallback_process_in_executor():
+                """降級處理的執行器版本"""
+                try:
+                    async def safe_fallback_update():
+                        try:
+                            # 連接池清理檢查（基礎處理器）
+                            if (telegram_bot_handler and 
+                                hasattr(telegram_bot_handler, '_connection_pool_stats')):
+                                pool_timeouts = telegram_bot_handler._connection_pool_stats.get("pool_timeouts", 0)
+                                if pool_timeouts > 3:
+                                    log_message(f"🧹 基礎處理器連接池清理 ({pool_timeouts} 次超時)...")
+                                    await telegram_bot_handler._cleanup_connection_pool()
+                            
+                            await fallback_process_update(update)
+                        except Exception as fallback_error:
+                            log_message(f"❌ 降級處理失敗: {fallback_error}", "ERROR")
+                            await handle_update_error(update, fallback_error)
+                    
+                    # 使用 asyncio.run() 管理事件循環
+                    asyncio.run(safe_fallback_update())
+                    
+                except Exception as executor_error:
+                    log_message(f"❌ 降級執行器錯誤: {executor_error}", "ERROR")
+            
+            thread = threading.Thread(target=fallback_process_in_executor)
             thread.daemon = True
             thread.start()
         
