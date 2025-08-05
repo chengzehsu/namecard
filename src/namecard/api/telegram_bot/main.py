@@ -641,6 +641,56 @@ async def handle_media_group_message(update: Update, context: ContextTypes.DEFAU
     
     log_message(f"📸 用戶 {user_id} 發送媒體群組: {media_group_id}")
     
+    # 🔧 Critical Fix: 確保批次收集器已初始化並設置回調函數
+    if batch_image_collector:
+        # 設置回調函數（如果尚未設置）
+        if not batch_image_collector.batch_processor:
+            log_message("⚙️ 媒體群組處理：設置批次收集器回調函數")
+            batch_image_collector.set_batch_processor(batch_processor_callback)
+            batch_image_collector.set_progress_notifier(batch_progress_notifier)
+            await batch_image_collector.start()
+        
+        # 直接使用批次收集器處理媒體群組
+        photo = update.message.photo[-1]  # 最高解析度
+        
+        # 優先使用增強處理器下載文件
+        file_result = None
+        if enhanced_telegram_handler:
+            try:
+                file_result = await enhanced_telegram_handler.safe_get_file(photo.file_id)
+            except Exception as e:
+                log_message(f"⚠️ 增強處理器下載失敗，降級到基礎處理器: {e}")
+        
+        if not file_result and telegram_bot_handler:
+            file_result = await telegram_bot_handler.safe_get_file(photo.file_id)
+
+        if file_result and file_result["success"]:
+            log_message(f"✅ 媒體群組圖片下載成功，添加到批次收集器")
+            
+            # 添加到批次收集器
+            try:
+                collection_result = await batch_image_collector.add_image(
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    image_data=file_result["file"],
+                    file_id=photo.file_id,
+                    metadata={
+                        "media_group_id": media_group_id,
+                        "message_id": update.message.message_id
+                    }
+                )
+                log_message(f"📥 媒體群組圖片已添加到批次收集器: {collection_result}")
+                return  # 批次收集器會處理後續邏輯
+                
+            except Exception as collector_error:
+                log_message(f"❌ 批次收集器處理失敗: {collector_error}", "ERROR")
+                # 降級到原始媒體群組處理
+        else:
+            log_message(f"❌ 媒體群組圖片下載失敗")
+    
+    # 🔄 降級：使用原始媒體群組收集器（批次收集器不可用時）
+    log_message(f"🔄 降級到原始媒體群組收集器")
+    
     # 初始化媒體群組收集器
     if media_group_id not in media_group_collector:
         media_group_collector[media_group_id] = {
@@ -676,7 +726,7 @@ async def handle_media_group_message(update: Update, context: ContextTypes.DEFAU
     })
     
     photo_count = len(media_group_collector[media_group_id]["photos"])
-    log_message(f"📥 媒體群組 {media_group_id} 收集第 {photo_count} 張圖片")
+    log_message(f"📥 媒體群組 {media_group_id} 收集第 {photo_count} 張圖片（降級模式）")
     
     # 🚨 Critical Fix: 只發送一次初始確認訊息，避免重複進度更新
     if photo_count == 1:
