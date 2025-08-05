@@ -529,30 +529,43 @@ async def handle_photo_message(
 
     try:
         # === 🚀 新增：智能批次收集邏輯 ===
+        log_message(f"🔍 用戶 {user_id} 開始處理圖片 - 批次模式: {is_batch_mode}, 收集器可用: {batch_image_collector is not None}")
+        
         if batch_image_collector and not is_batch_mode:  # 只在非批次模式使用智能收集
+            log_message(f"📸 用戶 {user_id} 進入智能批次收集邏輯")
+            
             # 設置回調函數（僅首次）
             if not batch_image_collector.batch_processor:
+                log_message("⚙️ 首次設置批次收集器回調函數")
                 batch_image_collector.set_batch_processor(batch_processor_callback)
                 batch_image_collector.set_progress_notifier(batch_progress_notifier)
                 await batch_image_collector.start()
             
             # 獲取圖片數據
             photo = update.message.photo[-1]  # 最高解析度
+            log_message(f"📥 用戶 {user_id} 獲取圖片 file_id: {photo.file_id}")
             
             # 優先使用增強處理器下載文件
             file_result = None
             if enhanced_telegram_handler:
                 try:
+                    log_message(f"🔄 用戶 {user_id} 嘗試使用增強處理器下載圖片")
                     file_result = await enhanced_telegram_handler.safe_get_file(photo.file_id)
+                    log_message(f"📊 用戶 {user_id} 增強處理器結果: {file_result['success'] if file_result else 'None'}")
                 except Exception as e:
-                    log_message(f"⚠️ 增強處理器下載失敗，降級到基礎處理器: {e}")
+                    log_message(f"⚠️ 用戶 {user_id} 增強處理器下載失敗，降級到基礎處理器: {e}")
             
             if not file_result and telegram_bot_handler:
+                log_message(f"🔄 用戶 {user_id} 嘗試使用基礎處理器下載圖片")
                 file_result = await telegram_bot_handler.safe_get_file(photo.file_id)
+                log_message(f"📊 用戶 {user_id} 基礎處理器結果: {file_result['success'] if file_result else 'None'}")
 
             if file_result and file_result["success"]:
+                log_message(f"✅ 用戶 {user_id} 圖片下載成功，準備添加到批次收集器")
+                
                 # 嘗試添加圖片到批次收集器
                 try:
+                    log_message(f"🔄 用戶 {user_id} 開始添加圖片到批次收集器")
                     collection_result = await batch_image_collector.add_image(
                         user_id=user_id,
                         chat_id=chat_id,
@@ -562,6 +575,7 @@ async def handle_photo_message(
                     )
                     
                     log_message(f"📥 用戶 {user_id} 圖片已添加到批次收集器: {collection_result}")
+                    log_message(f"🚀 用戶 {user_id} 圖片處理完成，交由批次收集器處理")
                     return  # 批次收集器會處理後續邏輯
                     
                 except Exception as collector_error:
@@ -572,10 +586,16 @@ async def handle_photo_message(
                     # 批次收集器失敗，回退到原邏輯
                     log_message(f"⚠️ 用戶 {user_id} 批次收集器失敗，回退到原邏輯", "WARNING")
             else:
+                log_message(f"❌ 用戶 {user_id} 圖片下載失敗，file_result: {file_result}")
                 log_message(f"❌ 用戶 {user_id} 圖片下載失敗，回退到原邏輯")
                 # 繼續執行原有邏輯作為fallback
+                
+        else:
+            log_message(f"⚠️ 用戶 {user_id} 跳過批次收集邏輯 - 收集器: {batch_image_collector is not None}, 批次模式: {is_batch_mode}")
         
         # === 原有邏輯 (作為fallback或批次模式) ===
+        log_message(f"🔄 用戶 {user_id} 進入原有處理邏輯 (批次模式: {is_batch_mode})")
+        
         # 更新用戶活動時間
         if is_batch_mode:
             batch_manager.update_activity(user_id)
