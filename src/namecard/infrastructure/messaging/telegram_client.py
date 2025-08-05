@@ -450,12 +450,19 @@ class TelegramBotHandler:
             # 如果有自定義 HTTP 客戶端，重新創建
             if hasattr(self, '_http_client') and self._http_client:
                 try:
-                    # 關閉當前客戶端
-                    await self._http_client.aclose()
-                    self.logger.debug("🗑️ 舊的 HTTP 客戶端已關閉")
+                    # 檢查客戶端類型並安全關閉
+                    if hasattr(self._http_client, 'aclose'):
+                        await self._http_client.aclose()
+                        self.logger.debug("🗑️ AsyncClient 已關閉")
+                    elif hasattr(self._http_client, 'close'):
+                        # 某些情況下可能是同步客戶端
+                        self._http_client.close()
+                        self.logger.debug("🗑️ 同步客戶端已關閉")
+                    else:
+                        self.logger.debug(f"⚠️ 未知客戶端類型: {type(self._http_client)}")
                     
                     # 等待一小段時間讓連接完全關閉
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(1)  # 減少等待時間
                     
                     # 重新設置優化的 Bot
                     self._setup_optimized_bot()
@@ -463,6 +470,12 @@ class TelegramBotHandler:
                     
                 except Exception as cleanup_error:
                     self.logger.error(f"❌ 連接池清理失敗: {cleanup_error}")
+                    # 即使清理失敗，也嘗試重新創建
+                    try:
+                        self._setup_optimized_bot()
+                        self.logger.info("✅ 強制重新創建連接池成功")
+                    except Exception as recreate_error:
+                        self.logger.error(f"❌ 強制重新創建失敗: {recreate_error}")
                     
         except Exception as e:
             self.logger.error(f"❌ 連接池清理過程發生錯誤: {e}")

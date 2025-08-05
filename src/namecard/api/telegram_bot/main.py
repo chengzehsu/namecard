@@ -551,17 +551,26 @@ async def handle_photo_message(
                 file_result = await telegram_bot_handler.safe_get_file(photo.file_id)
 
             if file_result and file_result["success"]:
-                # 添加圖片到批次收集器
-                collection_result = await batch_image_collector.add_image(
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    image_data=file_result["file"],
-                    file_id=photo.file_id,
-                    metadata={"message_id": update.message.message_id}
-                )
-                
-                log_message(f"📥 用戶 {user_id} 圖片已添加到批次收集器: {collection_result}")
-                return  # 批次收集器會處理後續邏輯
+                # 嘗試添加圖片到批次收集器
+                try:
+                    collection_result = await batch_image_collector.add_image(
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        image_data=file_result["file"],
+                        file_id=photo.file_id,
+                        metadata={"message_id": update.message.message_id}
+                    )
+                    
+                    log_message(f"📥 用戶 {user_id} 圖片已添加到批次收集器: {collection_result}")
+                    return  # 批次收集器會處理後續邏輯
+                    
+                except Exception as collector_error:
+                    log_message(f"❌ 處理圖片時發生錯誤: {collector_error}", "ERROR")
+                    import traceback
+                    log_message(f"完整錯誤堆疊: {traceback.format_exc()}", "ERROR")
+                    
+                    # 批次收集器失敗，回退到原邏輯
+                    log_message(f"⚠️ 用戶 {user_id} 批次收集器失敗，回退到原邏輯", "WARNING")
             else:
                 log_message(f"❌ 用戶 {user_id} 圖片下載失敗，回退到原邏輯")
                 # 繼續執行原有邏輯作為fallback

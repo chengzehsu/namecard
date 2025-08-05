@@ -185,10 +185,18 @@ class BatchImageCollector:
             
             batch_status.last_updated = current_time
             
-            # 取消現有計時器
+            # 安全取消現有計時器
             if batch_status.timer_task and not batch_status.timer_task.done():
-                batch_status.timer_task.cancel()
-                self.logger.debug(f"⏰ 用戶 {user_id} 重置批次計時器")
+                try:
+                    batch_status.timer_task.cancel()
+                    self.logger.debug(f"⏰ 用戶 {user_id} 重置批次計時器")
+                except RuntimeError as e:
+                    if "Event loop is closed" in str(e):
+                        self.logger.warning(f"⚠️ 用戶 {user_id} Event loop 已關閉，跳過計時器取消")
+                    else:
+                        self.logger.error(f"❌ 用戶 {user_id} 取消計時器失敗: {e}")
+                except Exception as e:
+                    self.logger.error(f"❌ 用戶 {user_id} 計時器取消異常: {e}")
         
         # 添加圖片到批次
         batch_status.images.append(pending_image)
@@ -266,9 +274,17 @@ class BatchImageCollector:
             self.logger.warning(f"⚠️ 用戶 {user_id} 批次已在處理中，跳過")
             return
         
-        # 取消計時器
+        # 安全取消計時器
         if batch_status.timer_task and not batch_status.timer_task.done():
-            batch_status.timer_task.cancel()
+            try:
+                batch_status.timer_task.cancel()
+            except RuntimeError as e:
+                if "Event loop is closed" in str(e):
+                    self.logger.warning(f"⚠️ 用戶 {user_id} Event loop 已關閉，跳過計時器取消")
+                else:
+                    self.logger.error(f"❌ 用戶 {user_id} 批次處理取消計時器失敗: {e}")
+            except Exception as e:
+                self.logger.error(f"❌ 用戶 {user_id} 批次處理計時器取消異常: {e}")
         
         # 標記為處理中
         batch_status.is_processing = True
