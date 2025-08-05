@@ -703,56 +703,100 @@ async def process_media_group_photos(user_id: str, chat_id: int, photos: list, m
             MessagePriority.HIGH
         )
         
-        # 使用批次圖片收集器處理（如果可用）
-        if batch_image_collector:
-            log_message(f"📦 使用批次收集器處理媒體群組 {media_group_id}")
+        # 🚀 直接使用超高速批次處理器（避免重複收集）
+        if ultra_fast_processor and photo_count > 1:
+            log_message(f"📦 媒體群組直接使用超高速批次處理 {media_group_id} ({photo_count} 張圖片)")
             
-            # 設置回調函數（如果尚未設置）
-            if not batch_image_collector.batch_processor:
-                batch_image_collector.set_batch_processor(batch_processor_callback)
-                batch_image_collector.set_progress_notifier(batch_progress_notifier)
-                await batch_image_collector.start()
-            
-            # 依序下載並添加圖片到批次收集器
-            for i, photo_info in enumerate(photos, 1):
-                try:
-                    log_message(f"📥 下載媒體群組第 {i}/{photo_count} 張圖片: {photo_info['file_id']}")
-                    
-                    # 下載圖片
-                    file_result = None
+            try:
+                # 並行下載所有圖片
+                download_tasks = []
+                for photo_info in photos:
                     if enhanced_telegram_handler:
-                        file_result = await enhanced_telegram_handler.safe_get_file(photo_info['file_id'])
-                    
-                    if not file_result or not file_result["success"]:
-                        if telegram_bot_handler:
-                            file_result = await telegram_bot_handler.safe_get_file(photo_info['file_id'])
-                    
-                    if file_result and file_result["success"]:
-                        # 添加到批次收集器
-                        await batch_image_collector.add_image(
-                            user_id=user_id,
-                            chat_id=chat_id,
-                            image_data=file_result["file"],
-                            file_id=photo_info['file_id'],
-                            metadata={
-                                "message_id": photo_info['message_id'],
-                                "media_group_id": media_group_id,
-                                "group_index": i,
-                                "group_total": photo_count
-                            }
-                        )
-                        log_message(f"✅ 媒體群組第 {i} 張圖片已添加到批次收集器")
+                        task = enhanced_telegram_handler.safe_get_file(photo_info['file_id'])
                     else:
-                        log_message(f"❌ 媒體群組第 {i} 張圖片下載失敗: {file_result}")
+                        task = telegram_bot_handler.safe_get_file(photo_info['file_id'])
+                    download_tasks.append(task)
+                
+                # 等待所有下载完成
+                download_results = await asyncio.gather(*download_tasks, return_exceptions=True)
+                
+                # 創建 Telegram Files 列表
+                telegram_files = []
+                for i, (photo_info, result) in enumerate(zip(photos, download_results)):
+                    if isinstance(result, dict) and result.get("success"):
+                        telegram_files.append(result["file"])
+                        log_message(f"✅ 媒體群組第 {i+1} 張圖片下載成功")
+                    else:
+                        log_message(f"❌ 媒體群組第 {i+1} 張圖片下載失敗: {result}")
+                
+                if telegram_files:
+                    log_message(f"🚀 開始媒體群組超高速批次處理 {len(telegram_files)} 張圖片")
+                    
+                    # 調用超高速批次處理
+                    ultra_result = await ultra_fast_processor.process_telegram_photos_batch_ultra_fast(
+                        telegram_files=telegram_files,
+                        user_id=user_id,
+                        processing_type="batch_multi_card"
+                    )
+                    
+                    if ultra_result.success:
+                        # 處理結果和存儲到 Notion
+                        batch_data = ultra_result.data
+                        cards_detected = batch_data.get('cards_detected', [])
                         
-                except Exception as e:
-                    log_message(f"❌ 處理媒體群組第 {i} 張圖片時出錯: {e}", "ERROR")
-            
-            log_message(f"✅ 媒體群組 {media_group_id} 所有圖片已提交到批次收集器")
-        else:
-            # 降級到逐一處理
-            log_message(f"⚠️ 批次收集器不可用，降級到逐一處理媒體群組 {media_group_id}")
-            await process_photos_individually(user_id, chat_id, photos)
+                        # 存儲到 Notion
+                        notion_results = []
+                        for card_data in cards_detected:
+                            try:
+                                notion_result = notion_manager.create_name_card_record(card_data, None)
+                                notion_results.append({
+                                    'success': notion_result['success'],
+                                    'card_data': card_data,
+                                    'notion_result': notion_result
+                                })
+                            except Exception as notion_error:
+                                log_message(f"❌ Notion 存儲失敗: {notion_error}", "ERROR")
+                                notion_results.append({
+                                    'success': False,
+                                    'card_data': card_data,
+                                    'error': str(notion_error)
+                                })
+                        
+                        # 發送結果給用戶
+                        success_cards = [r for r in notion_results if r['success']]
+                        failed_cards = [r for r in notion_results if not r['success']]
+                        
+                        result_message = f"✅ **媒體群組處理完成**\n\n"
+                        result_message += f"📊 **處理統計:**\n"
+                        result_message += f"• 總圖片數: {photo_count}\n"
+                        result_message += f"• 成功處理: {len(success_cards)} 張名片\n"
+                        result_message += f"• 處理失敗: {len(failed_cards)} 張\n\n"
+                        result_message += f"⚡ **效能表現:**\n"
+                        result_message += f"• 總耗時: {ultra_result.total_time:.1f} 秒\n"
+                        result_message += f"• 效能等級: {ultra_result.performance_grade}\n"
+                        result_message += f"• 時間節省: {ultra_result.time_saved:.1f} 秒\n\n"
+                        
+                        if success_cards:
+                            result_message += f"✅ **成功處理的名片:**\n"
+                            for result in success_cards[:5]:
+                                card = result['card_data']
+                                result_message += f"• {card.get('name', 'N/A')} ({card.get('company', 'N/A')})\n"
+                            if len(success_cards) > 5:
+                                result_message += f"• ... 還有 {len(success_cards) - 5} 張\n"
+                        
+                        await safe_telegram_send(chat_id, result_message, MessagePriority.HIGH)
+                        
+                        log_message(f"✅ 媒體群組 {media_group_id} 超高速批次處理完成")
+                        return
+                    else:
+                        log_message(f"❌ 媒體群組超高速處理失敗: {ultra_result.error}")
+                        
+            except Exception as e:
+                log_message(f"❌ 媒體群組超高速處理異常: {e}", "ERROR")
+        
+        # 🔄 降級處理：使用傳統逐一處理
+        log_message(f"⚠️ 媒體群組降級到逐一處理 {media_group_id}")
+        await process_photos_individually(user_id, chat_id, photos)
             
     except Exception as e:
         log_message(f"❌ 處理媒體群組 {media_group_id} 時發生錯誤: {e}", "ERROR")
