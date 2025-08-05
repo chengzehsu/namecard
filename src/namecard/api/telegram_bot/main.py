@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from flask import Flask, request
 from telegram import Update
@@ -29,6 +29,14 @@ from src.namecard.infrastructure.ai.card_processor import NameCardProcessor
 from src.namecard.infrastructure.storage.notion_client import NotionManager
 from src.namecard.infrastructure.messaging.telegram_client import TelegramBotHandler
 from src.namecard.core.services.interaction_service import UserInteractionHandler
+
+# 🚀 導入批次圖片收集器
+from src.namecard.core.services.batch_image_collector import (
+    BatchImageCollector,
+    get_batch_collector,
+    initialize_batch_collector,
+    PendingImage
+)
 
 # 🚀 導入超高速處理組件
 from src.namecard.infrastructure.ai.ultra_fast_processor import (
@@ -106,6 +114,9 @@ telegram_bot_handler = None
 ultra_fast_processor = None
 enhanced_telegram_handler = None
 
+# 🚀 批次圖片收集器
+batch_image_collector = None
+
 if config_valid:
     try:
         log_message("📦 正在初始化處理器...")
@@ -141,7 +152,34 @@ if config_valid:
         )
         log_message("✅ EnhancedTelegramBotHandler 增強處理器初始化成功")
         
-        log_message("🚀 所有處理器初始化成功（包含超高速組件）")
+        # 🚀 初始化批次圖片收集器和安全處理器
+        from src.namecard.core.services.safe_batch_processor import (
+            initialize_safe_batch_processor,
+            SafeProcessingConfig
+        )
+        
+        batch_image_collector = get_batch_collector()
+        log_message("✅ BatchImageCollector 批次收集器初始化成功")
+        
+        # 初始化安全批次處理器
+        safe_processor_config = SafeProcessingConfig(
+            max_concurrent_processing=8,  # 小於Semaphore限制(15)
+            processing_timeout=90.0,
+            enable_ultra_fast=True,
+            use_connection_pool_cleanup=True
+        )
+        
+        safe_batch_processor = initialize_safe_batch_processor(
+            enhanced_telegram_handler=enhanced_telegram_handler,
+            telegram_bot_handler=telegram_bot_handler,
+            ultra_fast_processor=ultra_fast_processor,
+            multi_card_processor=multi_card_processor,
+            notion_manager=notion_manager,
+            config=safe_processor_config
+        )
+        log_message("✅ SafeBatchProcessor 安全批次處理器初始化成功")
+        
+        log_message("🚀 所有處理器初始化成功（包含超高速組件 + 批次收集器）")
         processors_valid = True
     except Exception as e:
         log_message(f"❌ 處理器初始化失敗: {e}", "ERROR")
@@ -405,15 +443,130 @@ async def handle_text_message(
         await telegram_bot_handler.safe_send_message(chat_id, reply_text)
 
 
+async def batch_progress_notifier(user_id: str, chat_id: int, image_count: int, action: str = "image_added"):
+    """批次進度通知回調函數"""
+    try:
+        if action == "image_added":
+            if image_count == 1:
+                message = f"📥 收到 1 張名片圖片"
+            else:
+                message = f"📥 收到 {image_count} 張名片圖片，批次處理中..."
+                
+            # 添加等待提示
+            message += f"\n⏱️ 將在 5 秒後開始處理，或繼續上傳更多圖片"
+            
+            await safe_telegram_send(chat_id, message, MessagePriority.HIGH)
+            
+    except Exception as e:
+        log_message(f"❌ 批次進度通知失敗: {e}", "ERROR")
+
+
+async def batch_processor_callback(user_id: str, images: List[PendingImage]):
+    """批次處理回調函數"""
+    try:
+        from src.namecard.core.services.safe_batch_processor import get_safe_batch_processor
+        from src.namecard.core.services.unified_result_formatter import UnifiedResultFormatter
+        
+        if not images:
+            log_message(f"⚠️ 用戶 {user_id} 批次處理：無圖片", "WARNING")
+            return
+        
+        chat_id = images[0].chat_id
+        image_count = len(images)
+        
+        log_message(f"🚀 開始處理用戶 {user_id} 的批次 ({image_count} 張圖片)")
+        
+        # 獲取安全批次處理器
+        safe_processor = get_safe_batch_processor()
+        if not safe_processor:
+            error_msg = "❌ 批次處理器未初始化，請聯繫管理員"
+            await safe_telegram_send(chat_id, error_msg, MessagePriority.EMERGENCY)
+            return
+        
+        # 執行安全批次處理
+        batch_result = await safe_processor.process_batch_safely(
+            user_id=user_id,
+            images=images,
+            progress_callback=None  # 暫時不使用內部進度回調
+        )
+        
+        # 格式化並發送統一結果
+        formatter = UnifiedResultFormatter()
+        result_message = formatter.format_batch_result(batch_result)
+        
+        await safe_telegram_send(chat_id, result_message, MessagePriority.HIGH)
+        
+        log_message(f"✅ 用戶 {user_id} 批次處理完成 ({batch_result.success_rate:.0f}% 成功率)")
+        
+    except Exception as e:
+        log_message(f"❌ 批次處理回調錯誤: {e}", "ERROR")
+        import traceback
+        log_message(f"錯誤堆疊: {traceback.format_exc()}", "ERROR")
+        
+        # 發送錯誤訊息給用戶
+        if images:
+            try:
+                chat_id = images[0].chat_id
+                error_msg = (
+                    f"❌ 批次處理發生錯誤\n\n"
+                    f"錯誤原因: {str(e)[:100]}...\n\n"
+                    f"建議:\n"
+                    f"• 🔄 重新上傳圖片\n"
+                    f"• 📞 如問題持續，請聯繫客服"
+                )
+                await safe_telegram_send(chat_id, error_msg, MessagePriority.EMERGENCY)
+            except Exception as notify_error:
+                log_message(f"❌ 錯誤通知失敗: {notify_error}", "ERROR")
+
+
 async def handle_photo_message(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """處理圖片訊息 - 名片識別"""
+    """處理圖片訊息 - 名片識別（支援智能批次收集）"""
     user_id = str(update.effective_user.id)
     chat_id = update.effective_chat.id
     is_batch_mode = batch_manager.is_in_batch_mode(user_id)
 
     try:
+        # === 🚀 新增：智能批次收集邏輯 ===
+        if batch_image_collector and not is_batch_mode:  # 只在非批次模式使用智能收集
+            # 設置回調函數（僅首次）
+            if not batch_image_collector.batch_processor:
+                batch_image_collector.set_batch_processor(batch_processor_callback)
+                batch_image_collector.set_progress_notifier(batch_progress_notifier)
+                await batch_image_collector.start()
+            
+            # 獲取圖片數據
+            photo = update.message.photo[-1]  # 最高解析度
+            
+            # 優先使用增強處理器下載文件
+            file_result = None
+            if enhanced_telegram_handler:
+                try:
+                    file_result = await enhanced_telegram_handler.safe_get_file(photo.file_id)
+                except Exception as e:
+                    log_message(f"⚠️ 增強處理器下載失敗，降級到基礎處理器: {e}")
+            
+            if not file_result and telegram_bot_handler:
+                file_result = await telegram_bot_handler.safe_get_file(photo.file_id)
+
+            if file_result and file_result["success"]:
+                # 添加圖片到批次收集器
+                collection_result = await batch_image_collector.add_image(
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    image_data=file_result["file"],
+                    file_id=photo.file_id,
+                    metadata={"message_id": update.message.message_id}
+                )
+                
+                log_message(f"📥 用戶 {user_id} 圖片已添加到批次收集器: {collection_result}")
+                return  # 批次收集器會處理後續邏輯
+            else:
+                log_message(f"❌ 用戶 {user_id} 圖片下載失敗，回退到原邏輯")
+                # 繼續執行原有邏輯作為fallback
+        
+        # === 原有邏輯 (作為fallback或批次模式) ===
         # 更新用戶活動時間
         if is_batch_mode:
             batch_manager.update_activity(user_id)
