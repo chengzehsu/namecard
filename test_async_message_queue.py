@@ -389,7 +389,10 @@ class TestAsyncMessageQueue:
 
         # 發送訊息
         await queue.enqueue_message(
-            chat_id=12345, text="重試測試", priority=MessagePriority.NORMAL, max_retries=3
+            chat_id=12345,
+            text="重試測試",
+            priority=MessagePriority.NORMAL,
+            max_retries=3,
         )
 
         # 等待重試完成
@@ -695,7 +698,10 @@ class TestAsyncMessageQueue:
 
         # 發送一條有限重試次數的訊息
         await queue.enqueue_message(
-            chat_id=12345, text="重試耗盡測試", priority=MessagePriority.NORMAL, max_retries=2
+            chat_id=12345,
+            text="重試耗盡測試",
+            priority=MessagePriority.NORMAL,
+            max_retries=2,
         )
 
         # 等待所有重試完成
@@ -891,7 +897,9 @@ async def run_async_message_queue_integration_test():
 
         # 檢查實際發送的訊息
         emergency_messages = [msg for msg in sent_messages if "緊急" in msg["text"]]
-        batch_summaries = [msg for msg in sent_messages if "**批次處理完成**" in msg["text"]]
+        batch_summaries = [
+            msg for msg in sent_messages if "**批次處理完成**" in msg["text"]
+        ]
 
         print(f"   - 緊急訊息: {len(emergency_messages)} 條 (應該 >0)")
         print(f"   - 批次摘要: {len(batch_summaries)} 條 (應該 >0)")

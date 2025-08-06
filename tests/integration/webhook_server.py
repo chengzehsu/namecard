@@ -8,9 +8,10 @@ import logging
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
-from config import Config
 from name_card_processor import NameCardProcessor
 from notion_manager import NotionManager
+
+from config import Config
 
 # 設定日誌
 logging.basicConfig(level=logging.INFO)

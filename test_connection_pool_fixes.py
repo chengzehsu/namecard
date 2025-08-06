@@ -185,7 +185,9 @@ class TestConnectionPoolFixes:
         assert (
             len(successful_results) >= 25
         ), f"成功的 session 數量過少: {len(successful_results)}/30"
-        assert len(error_results) <= 5, f"錯誤的 session 數量過多: {len(error_results)}/30"
+        assert (
+            len(error_results) <= 5
+        ), f"錯誤的 session 數量過多: {len(error_results)}/30"
         assert len(completed_sessions) == len(successful_results)
 
     # ==========================================
@@ -270,8 +272,12 @@ class TestConnectionPoolFixes:
 
         # 驗證重試機制
         successful_results = [r for r in results if r is True]
-        assert len(successful_results) == 5, f"重試機制失敗: {len(successful_results)}/5"
-        assert len(retry_attempts) == 15, f"重試次數不正確: {len(retry_attempts)} (應該是 15)"
+        assert (
+            len(successful_results) == 5
+        ), f"重試機制失敗: {len(successful_results)}/5"
+        assert (
+            len(retry_attempts) == 15
+        ), f"重試次數不正確: {len(retry_attempts)} (應該是 15)"
 
     # ==========================================
     # 4. 並行下載器特定測試

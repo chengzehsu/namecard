@@ -436,7 +436,9 @@ class TestNameCardProcessorComplete:
 
             # 驗證連接池穩定性
             assert connection_errors == 0, f"發現 {connection_errors} 個連接池錯誤"
-            assert successful_results >= 15, f"成功處理數量過少: {successful_results}/20"
+            assert (
+                successful_results >= 15
+            ), f"成功處理數量過少: {successful_results}/20"
 
     def test_memory_usage_optimization(self, card_processor, sample_card_image):
         """測試記憶體使用優化"""

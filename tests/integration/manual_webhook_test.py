@@ -6,10 +6,9 @@
 import io
 import json
 
-from PIL import Image, ImageDraw, ImageFont
-
 from name_card_processor import NameCardProcessor
 from notion_manager import NotionManager
+from PIL import Image, ImageDraw, ImageFont
 
 
 def create_realistic_business_card():

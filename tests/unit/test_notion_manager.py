@@ -5,7 +5,6 @@ Unit tests for NotionManager - Notion 資料庫管理器測試
 from unittest.mock import Mock, call, patch
 
 import pytest
-
 from notion_manager import NotionManager
 
 

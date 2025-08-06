@@ -8,9 +8,8 @@ import io
 import json
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
-
 from name_card_processor import NameCardProcessor
+from PIL import Image, ImageDraw, ImageFont
 
 
 def create_test_business_card():

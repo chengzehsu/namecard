@@ -6,7 +6,6 @@ import time
 from unittest.mock import Mock, patch
 
 import pytest
-
 from batch_manager import BatchManager
 
 

@@ -10,11 +10,11 @@ import hmac
 import io
 import json
 
+from name_card_processor import NameCardProcessor
+from notion_manager import NotionManager
 from PIL import Image, ImageDraw, ImageFont
 
 from config import Config
-from name_card_processor import NameCardProcessor
-from notion_manager import NotionManager
 
 
 def create_test_business_card():

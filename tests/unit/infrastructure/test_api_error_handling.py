@@ -6,10 +6,9 @@
 import time
 from unittest.mock import Mock, patch
 
+from line_bot_handler import LineBotApiHandler
 from linebot.exceptions import LineBotApiError
 from linebot.models import Error
-
-from line_bot_handler import LineBotApiHandler
 
 
 def test_quota_exceeded_error():

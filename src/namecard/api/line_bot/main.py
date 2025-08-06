@@ -9,17 +9,17 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import ImageMessage, MessageEvent, TextMessage, TextSendMessage
 
 # 添加根目錄到 Python 路徑
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
 sys.path.insert(0, root_dir)
 
 from simple_config import Config
 from src.namecard.core.services.batch_service import BatchManager
-from src.namecard.infrastructure.messaging.line_client import LineBotApiHandler
+from src.namecard.core.services.interaction_service import UserInteractionHandler
 from src.namecard.core.services.multi_card_service import MultiCardProcessor
 from src.namecard.infrastructure.ai.card_processor import NameCardProcessor
+from src.namecard.infrastructure.messaging.line_client import LineBotApiHandler
 from src.namecard.infrastructure.storage.notion_client import NotionManager
 from src.namecard.utils.pr_creator import PRCreator
-from src.namecard.core.services.interaction_service import UserInteractionHandler
 
 # 初始化 Flask 應用
 app = Flask(__name__)

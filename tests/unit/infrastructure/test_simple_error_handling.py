@@ -3,10 +3,9 @@
 直接測試錯誤處理邏輯，避免重試機制延遲
 """
 
+from line_bot_handler import LineBotApiHandler
 from linebot.exceptions import LineBotApiError
 from linebot.models import Error
-
-from line_bot_handler import LineBotApiHandler
 
 
 def test_error_handling_logic():

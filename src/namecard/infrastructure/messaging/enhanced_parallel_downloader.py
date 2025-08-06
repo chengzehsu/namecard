@@ -150,7 +150,9 @@ class EnhancedParallelDownloader:
 
                 if len(data) > 0:
                     self.stats["cache_hits"] += 1
-                    self.logger.debug(f"💾 快取命中: {file_id[:12]}... ({len(data)} bytes)")
+                    self.logger.debug(
+                        f"💾 快取命中: {file_id[:12]}... ({len(data)} bytes)"
+                    )
                     return data
 
             except Exception as e:

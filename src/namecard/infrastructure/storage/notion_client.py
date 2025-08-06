@@ -6,8 +6,8 @@ from datetime import datetime
 
 from notion_client import Client
 
-from src.namecard.core.services.address_service import is_valid_taiwan_address
 from simple_config import Config
+from src.namecard.core.services.address_service import is_valid_taiwan_address
 
 
 class NotionManager:
@@ -100,8 +100,10 @@ class NotionManager:
             phone_text = card_data["phone"]
             if isinstance(phone_text, list):
                 # 如果是陣列，合併為字串
-                phone_text = ", ".join([str(p).strip() for p in phone_text if p and str(p).strip()])
-            
+                phone_text = ", ".join(
+                    [str(p).strip() for p in phone_text if p and str(p).strip()]
+                )
+
             # 確保電話號碼不為空且格式合理
             if phone_text and phone_text.strip():
                 phone_text = phone_text.strip()

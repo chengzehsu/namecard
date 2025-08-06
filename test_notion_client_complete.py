@@ -121,7 +121,10 @@ class TestNotionClientComplete:
         assert properties["Name"]["title"][0]["text"]["content"] == "張小明"
 
         assert "公司名稱" in properties
-        assert properties["公司名稱"]["rich_text"][0]["text"]["content"] == "科技創新股份有限公司"
+        assert (
+            properties["公司名稱"]["rich_text"][0]["text"]["content"]
+            == "科技創新股份有限公司"
+        )
 
         assert "職稱" in properties
         assert properties["職稱"]["select"]["name"] == "技術總監"
@@ -147,7 +150,9 @@ class TestNotionClientComplete:
 
         assert "Email" not in properties
         assert "Email備註" in properties
-        assert "格式待確認" in properties["Email備註"]["rich_text"][0]["text"]["content"]
+        assert (
+            "格式待確認" in properties["Email備註"]["rich_text"][0]["text"]["content"]
+        )
 
     def test_build_properties_phone_validation(self, notion_manager):
         """測試電話號碼格式驗證"""
@@ -182,7 +187,8 @@ class TestNotionClientComplete:
 
             assert "地址" in properties
             assert (
-                properties["地址"]["rich_text"][0]["text"]["content"] == "台北市信義區信義路五段7號"
+                properties["地址"]["rich_text"][0]["text"]["content"]
+                == "台北市信義區信義路五段7號"
             )
 
         # 測試非台灣地址
@@ -195,13 +201,16 @@ class TestNotionClientComplete:
             properties = notion_manager._build_properties(foreign_address_data)
 
             assert "地址備註" in properties
-            assert "非台灣地址" in properties["地址備註"]["rich_text"][0]["text"]["content"]
+            assert (
+                "非台灣地址"
+                in properties["地址備註"]["rich_text"][0]["text"]["content"]
+            )
 
     def test_build_properties_partial_data(self, notion_manager):
         """測試部分數據的屬性建構"""
         partial_data = {
             "name": "測試姓名",
-            "email": "test@example.com"
+            "email": "test@example.com",
             # 缺少其他欄位
         }
 
@@ -322,9 +331,11 @@ class TestNotionClientComplete:
         # Mock Notion API 調用
         notion_manager.notion.blocks.children.append = Mock()
 
-        with patch("tempfile.NamedTemporaryFile"), patch(
-            "base64.b64encode", return_value=b"base64data"
-        ), patch("os.path.getsize", return_value=len(sample_image_bytes)):
+        with (
+            patch("tempfile.NamedTemporaryFile"),
+            patch("base64.b64encode", return_value=b"base64data"),
+            patch("os.path.getsize", return_value=len(sample_image_bytes)),
+        ):
             # 這個方法可能不存在，我們需要先檢查
             if hasattr(notion_manager, "_add_image_info_to_page"):
                 notion_manager._add_image_info_to_page(page_id, sample_image_bytes)
@@ -494,11 +505,12 @@ class TestNotionClientComplete:
         notion_manager.notion.pages.create.return_value = mock_create_response
         notion_manager.notion.blocks.children.append = Mock()
 
-        with patch.object(
-            notion_manager, "_add_image_info_to_page"
-        ) as mock_add_image, patch.object(
-            notion_manager, "_add_address_processing_info"
-        ) as mock_add_address:
+        with (
+            patch.object(notion_manager, "_add_image_info_to_page") as mock_add_image,
+            patch.object(
+                notion_manager, "_add_address_processing_info"
+            ) as mock_add_address,
+        ):
             # 執行完整的工作流程
             result = notion_manager.create_name_card_record(
                 sample_card_data, sample_image_bytes

@@ -223,7 +223,8 @@ class ConnectionPoolManager:
                     # 指數退避重試
                     delay = self.config.retry_backoff * (2**attempt)
                     self.logger.debug(
-                        f"🔄 重試 {attempt + 1}/{max_retries}: {url} " f"(延遲 {delay:.1f}s)"
+                        f"🔄 重試 {attempt + 1}/{max_retries}: {url} "
+                        f"(延遲 {delay:.1f}s)"
                     )
                     await asyncio.sleep(delay)
                 else:
@@ -243,7 +244,9 @@ class ConnectionPoolManager:
         if not urls:
             return []
 
-        self.logger.info(f"🚀 開始批次下載 {len(urls)} 個 URL (並發度: {max_concurrent})")
+        self.logger.info(
+            f"🚀 開始批次下載 {len(urls)} 個 URL (並發度: {max_concurrent})"
+        )
 
         # 創建信號量控制並發
         semaphore = asyncio.Semaphore(max_concurrent)
