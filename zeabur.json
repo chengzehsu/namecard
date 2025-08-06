@@ -1,24 +1,26 @@
 {
-  "name": "telegram-bot",
   "build": {
     "command": "pip install -r requirements.txt"
   },
-  "start": {
-    "command": "python src/namecard/api/telegram_bot/main.py"
-  },
-  "port": 5003,
   "environment": {
-    "PORT": "5003",
-    "PYTHON_VERSION": "3.9",
     "FLASK_ENV": "production",
+    "PORT": "5002",
     "PYTHONUNBUFFERED": "1",
-    "SERVICE_TYPE": "telegram-bot"
+    "PYTHON_VERSION": "3.9",
+    "SERVICE_TYPE": "line-bot"
   },
-  "regions": ["hkg"],
   "healthcheck": {
-    "path": "/health",
     "interval": 30,
-    "timeout": 10,
-    "retries": 3
+    "path": "/health",
+    "retries": 3,
+    "timeout": 10
+  },
+  "name": "line-bot-namecard",
+  "port": 5002,
+  "regions": [
+    "hkg"
+  ],
+  "start": {
+    "command": "python app.py"
   }
 }

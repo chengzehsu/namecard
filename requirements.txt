@@ -1,7 +1,7 @@
-# Telegram Bot 名片管理系統依賴包
+# LINE Bot 名片管理系統依賴包
 
-# Telegram Bot 核心
-python-telegram-bot==20.7
+# LINE Bot 核心
+line-bot-sdk==3.8.0
 
 # Web 框架
 flask==3.0.0
@@ -24,5 +24,5 @@ requests==2.31.0
 # 日誌和工具
 aiofiles==23.2.1
 
-# 🚀 超高速處理系統新增依賴
+# HTTP 處理
 aiohttp==3.9.1
