@@ -74,35 +74,69 @@ def log_message(message, level="INFO"):
     return log_line
 
 
-# 驗證配置
+# 驗證配置 - 增強診斷版本
 config_valid = False
 try:
-    # 檢查 Telegram Bot Token
-    if (
-        not Config.TELEGRAM_BOT_TOKEN
-        or Config.TELEGRAM_BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE"
-    ):
-        log_message("❌ TELEGRAM_BOT_TOKEN 未設置", "ERROR")
-        log_message("💡 請在 Zeabur Dashboard 設置 TELEGRAM_BOT_TOKEN", "INFO")
-        log_message("📋 目前環境變數狀態:", "INFO")
-        Config.show_config()
-    elif not Config.validate():
-        log_message("❌ 配置驗證失敗", "ERROR")
-        log_message("💡 請檢查環境變數設置", "INFO")
-        log_message("📋 目前環境變數狀態:", "INFO")
-        Config.show_config()
-    else:
+    # 🔍 詳細環境變數診斷
+    log_message("🔍 開始配置診斷...")
+    
+    # 檢查原始環境變數
+    env_check = {
+        "TELEGRAM_BOT_TOKEN": bool(os.getenv("TELEGRAM_BOT_TOKEN", "").strip()),
+        "GOOGLE_API_KEY": bool(os.getenv("GOOGLE_API_KEY", "").strip()),
+        "NOTION_API_KEY": bool(os.getenv("NOTION_API_KEY", "").strip()),
+        "NOTION_DATABASE_ID": bool(os.getenv("NOTION_DATABASE_ID", "").strip()),
+    }
+    
+    log_message(f"📊 原始環境變數狀態: {sum(env_check.values())}/4 已設置")
+    for var, status in env_check.items():
+        log_message(f"  {var}: {'✅' if status else '❌'}")
+    
+    # 檢查 Config 類中的值
+    config_check = {
+        "TELEGRAM_BOT_TOKEN": bool(Config.TELEGRAM_BOT_TOKEN.strip())
+        if Config.TELEGRAM_BOT_TOKEN
+        else False,
+        "GOOGLE_API_KEY": bool(Config.GOOGLE_API_KEY.strip())
+        if Config.GOOGLE_API_KEY
+        else False,
+        "NOTION_API_KEY": bool(Config.NOTION_API_KEY.strip())
+        if Config.NOTION_API_KEY
+        else False,
+        "NOTION_DATABASE_ID": bool(Config.NOTION_DATABASE_ID.strip())
+        if Config.NOTION_DATABASE_ID
+        else False,
+    }
+    
+    log_message(f"📋 Config 類狀態: {sum(config_check.values())}/4 已載入")
+    for var, status in config_check.items():
+        log_message(f"  {var}: {'✅' if status else '❌'}")
+    
+    # 執行配置驗證
+    if Config.validate():
         log_message("✅ Telegram Bot 配置驗證成功")
         config_valid = True
+    else:
+        log_message("❌ 配置驗證失敗", "ERROR")
+        if sum(env_check.values()) == 4 and sum(config_check.values()) < 4:
+            log_message("🚨 環境變數已設置但 Config 讀取失敗！", "ERROR")
+            log_message("💡 可能需要重啟服務或檢查變數格式", "WARNING")
+        elif sum(env_check.values()) < 4:
+            log_message("💡 請在 Zeabur Dashboard 設置缺失的環境變數", "INFO")
+            log_message("📍 設置位置: Dashboard > Service > Environment Variables", "INFO")
+            
 except Exception as e:
-    log_message(f"❌ 配置錯誤: {e}", "ERROR")
-    log_message("💡 請檢查環境變數設置", "INFO")
-    log_message("📋 目前環境變數狀態:", "INFO")
-    Config.show_config()
+    log_message(f"❌ 配置診斷錯誤: {e}", "ERROR")
+    import traceback
+    log_message(f"🔍 詳細錯誤: {traceback.format_exc()}", "DEBUG")
 
 if not config_valid:
-    log_message("🚨 配置無效，啟動失敗模式", "ERROR")
-    # 不立即退出，而是啟動一個基本的錯誤報告服務
+    log_message("🚨 配置無效，啟動診斷模式", "ERROR")
+    log_message("📋 診斷模式功能:", "INFO")
+    log_message("  - /health 端點可用", "INFO")
+    log_message("  - /env-diagnostic 端點可用", "INFO")
+    log_message("  - 基本錯誤報告可用", "INFO")
+    # 不立即退出，而是啟動一個基本的診斷服務
 
 # 初始化處理器
 processors_valid = False
@@ -1841,6 +1875,101 @@ async def fallback_process_update(update: Update):
 def health_check():
     """健康檢查端點"""
     return {"status": "healthy", "message": "Telegram Bot is running"}
+
+
+@flask_app.route("/env-diagnostic", methods=["GET"])
+def env_diagnostic():
+    """環境變數診斷端點 - 用於 Zeabur 部署診斷"""
+    try:
+        # 檢查原始環境變數
+        env_vars = {
+            'TELEGRAM_BOT_TOKEN': bool(os.getenv('TELEGRAM_BOT_TOKEN', '').strip()),
+            'GOOGLE_API_KEY': bool(os.getenv('GOOGLE_API_KEY', '').strip()),
+            'NOTION_API_KEY': bool(os.getenv('NOTION_API_KEY', '').strip()),
+            'NOTION_DATABASE_ID': bool(os.getenv('NOTION_DATABASE_ID', '').strip())
+        }
+        
+        # 檢查 Config 類狀態
+        config_vars = {
+            'TELEGRAM_BOT_TOKEN': bool(Config.TELEGRAM_BOT_TOKEN.strip()) if Config.TELEGRAM_BOT_TOKEN else False,
+            'GOOGLE_API_KEY': bool(Config.GOOGLE_API_KEY.strip()) if Config.GOOGLE_API_KEY else False,
+            'NOTION_API_KEY': bool(Config.NOTION_API_KEY.strip()) if Config.NOTION_API_KEY else False,
+            'NOTION_DATABASE_ID': bool(Config.NOTION_DATABASE_ID.strip()) if Config.NOTION_DATABASE_ID else False
+        }
+        
+        # 配置驗證
+        config_valid_status = Config.validate()
+        
+        return {
+            "status": "diagnostic_complete",
+            "timestamp": datetime.now().isoformat(),
+            "environment_variables": {
+                "raw_env_vars": env_vars,
+                "env_vars_set": f"{sum(env_vars.values())}/4",
+                "config_class_vars": config_vars,
+                "config_vars_loaded": f"{sum(config_vars.values())}/4"
+            },
+            "configuration": {
+                "config_valid": config_valid_status,
+                "processors_initialized": processors_valid if 'processors_valid' in globals() else False
+            },
+            "diagnosis": {
+                "all_env_vars_set": sum(env_vars.values()) == 4,
+                "all_config_vars_loaded": sum(config_vars.values()) == 4,
+                "system_ready": config_valid_status and processors_valid if 'processors_valid' in globals() else False
+            },
+            "recommendations": get_diagnostic_recommendations(env_vars, config_vars, config_valid_status)
+        }
+        
+    except Exception as e:
+        return {
+            "status": "diagnostic_error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+def get_diagnostic_recommendations(env_vars, config_vars, config_valid):
+    """生成診斷建議"""
+    recommendations = []
+    
+    env_all_set = sum(env_vars.values()) == 4
+    config_all_loaded = sum(config_vars.values()) == 4
+    
+    if not env_all_set:
+        missing_env = [var for var, status in env_vars.items() if not status]
+        recommendations.append({
+            "priority": "high",
+            "issue": "missing_environment_variables", 
+            "description": f"缺失環境變數: {', '.join(missing_env)}",
+            "solution": "在 Zeabur Dashboard > Service > Environment Variables 中設置缺失的變數"
+        })
+    
+    if env_all_set and not config_all_loaded:
+        recommendations.append({
+            "priority": "high",
+            "issue": "config_loading_failed",
+            "description": "環境變數已設置但 Config 類讀取失敗",
+            "solution": "重新部署服務或檢查環境變數格式（是否包含特殊字符）"
+        })
+    
+    if env_all_set and config_all_loaded and not config_valid:
+        recommendations.append({
+            "priority": "medium", 
+            "issue": "config_validation_failed",
+            "description": "配置驗證失敗，可能是 API Key 格式問題",
+            "solution": "檢查 API Keys 是否有效且格式正確"
+        })
+    
+    if not recommendations:
+        recommendations.append({
+            "priority": "low",
+            "issue": "system_healthy",
+            "description": "所有配置檢查通過",
+            "solution": "系統應該正常運行"
+        })
+    
+    return recommendations
 
 
 @flask_app.route("/test", methods=["GET"])
