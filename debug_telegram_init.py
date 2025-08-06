@@ -99,7 +99,10 @@ async def test_handler_creation():
         )
 
         enhanced_handler = create_enhanced_telegram_handler(
-            enable_queue=True, queue_workers=2, batch_size=1, batch_timeout=1.0  # 減少測試
+            enable_queue=True,
+            queue_workers=2,
+            batch_size=1,
+            batch_timeout=1.0,  # 減少測試
         )
         print("✅ EnhancedTelegramBotHandler 創建成功")
 
