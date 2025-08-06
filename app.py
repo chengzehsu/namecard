@@ -76,7 +76,10 @@ def main():
 
         # 啟動 Flask 應用
         line_app.run(
-            host="0.0.0.0", port=port, debug=debug_mode, use_reloader=False  # 生產環境關閉重載器
+            host="0.0.0.0",
+            port=port,
+            debug=debug_mode,
+            use_reloader=False,  # 生產環境關閉重載器
         )
 
     except ImportError as e:

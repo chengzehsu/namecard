@@ -94,18 +94,22 @@ try:
 
     # 檢查 Config 類中的值
     config_check = {
-        "TELEGRAM_BOT_TOKEN": bool(Config.TELEGRAM_BOT_TOKEN.strip())
-        if Config.TELEGRAM_BOT_TOKEN
-        else False,
-        "GOOGLE_API_KEY": bool(Config.GOOGLE_API_KEY.strip())
-        if Config.GOOGLE_API_KEY
-        else False,
-        "NOTION_API_KEY": bool(Config.NOTION_API_KEY.strip())
-        if Config.NOTION_API_KEY
-        else False,
-        "NOTION_DATABASE_ID": bool(Config.NOTION_DATABASE_ID.strip())
-        if Config.NOTION_DATABASE_ID
-        else False,
+        "TELEGRAM_BOT_TOKEN": (
+            bool(Config.TELEGRAM_BOT_TOKEN.strip())
+            if Config.TELEGRAM_BOT_TOKEN
+            else False
+        ),
+        "GOOGLE_API_KEY": (
+            bool(Config.GOOGLE_API_KEY.strip()) if Config.GOOGLE_API_KEY else False
+        ),
+        "NOTION_API_KEY": (
+            bool(Config.NOTION_API_KEY.strip()) if Config.NOTION_API_KEY else False
+        ),
+        "NOTION_DATABASE_ID": (
+            bool(Config.NOTION_DATABASE_ID.strip())
+            if Config.NOTION_DATABASE_ID
+            else False
+        ),
     }
 
     log_message(f"📋 Config 類狀態: {sum(config_check.values())}/4 已載入")
@@ -123,7 +127,9 @@ try:
             log_message("💡 可能需要重啟服務或檢查變數格式", "WARNING")
         elif sum(env_check.values()) < 4:
             log_message("💡 請在 Zeabur Dashboard 設置缺失的環境變數", "INFO")
-            log_message("📍 設置位置: Dashboard > Service > Environment Variables", "INFO")
+            log_message(
+                "📍 設置位置: Dashboard > Service > Environment Variables", "INFO"
+            )
 
 except Exception as e:
     log_message(f"❌ 配置診斷錯誤: {e}", "ERROR")
@@ -519,7 +525,9 @@ async def batch_processor_callback(user_id: str, images: List[PendingImage]):
         chat_id = images[0].chat_id
         image_count = len(images)
 
-        log_message(f"🚀 Phase 5: 開始真正批次處理用戶 {user_id} 的 {image_count} 張圖片")
+        log_message(
+            f"🚀 Phase 5: 開始真正批次處理用戶 {user_id} 的 {image_count} 張圖片"
+        )
 
         # 發送處理開始訊息
         processing_msg = (
@@ -584,7 +592,9 @@ async def batch_processor_callback(user_id: str, images: List[PendingImage]):
                                     }
                                 )
                             except Exception as notion_error:
-                                log_message(f"❌ Notion 存儲失敗: {notion_error}", "ERROR")
+                                log_message(
+                                    f"❌ Notion 存儲失敗: {notion_error}", "ERROR"
+                                )
                                 notion_results.append(
                                     {
                                         "success": False,
@@ -604,9 +614,15 @@ async def batch_processor_callback(user_id: str, images: List[PendingImage]):
                         result_message += f"• 處理失敗: {len(failed_cards)} 張\n"
                         result_message += f"• 下載失敗: {len(failed_downloads)} 張\n\n"
                         result_message += f"⚡ **效能表現:**\n"
-                        result_message += f"• 總耗時: {ultra_result.total_time:.1f} 秒\n"
-                        result_message += f"• 效能等級: {ultra_result.performance_grade}\n"
-                        result_message += f"• 時間節省: {ultra_result.time_saved:.1f} 秒\n\n"
+                        result_message += (
+                            f"• 總耗時: {ultra_result.total_time:.1f} 秒\n"
+                        )
+                        result_message += (
+                            f"• 效能等級: {ultra_result.performance_grade}\n"
+                        )
+                        result_message += (
+                            f"• 時間節省: {ultra_result.time_saved:.1f} 秒\n\n"
+                        )
 
                         if success_cards:
                             result_message += f"✅ **成功處理的名片:**\n"
@@ -624,14 +640,18 @@ async def batch_processor_callback(user_id: str, images: List[PendingImage]):
                                 card = result["card_data"]
                                 result_message += f"• {card.get('name', '未知')}: {result.get('error', '處理失敗')[:30]}...\n"
                             if failed_downloads:
-                                result_message += f"• {len(failed_downloads)} 張圖片下載失敗\n"
+                                result_message += (
+                                    f"• {len(failed_downloads)} 張圖片下載失敗\n"
+                                )
 
                         await safe_telegram_send(
                             chat_id, result_message, MessagePriority.HIGH
                         )
                         return
                     else:
-                        log_message(f"⚠️ 超高速批次處理失敗: {ultra_result.error}，降級到安全處理器")
+                        log_message(
+                            f"⚠️ 超高速批次處理失敗: {ultra_result.error}，降級到安全處理器"
+                        )
                 else:
                     log_message(f"⚠️ 無法轉換為 Telegram File 對象，降級到安全處理器")
 
@@ -667,7 +687,9 @@ async def batch_processor_callback(user_id: str, images: List[PendingImage]):
 
         await safe_telegram_send(chat_id, result_message, MessagePriority.HIGH)
 
-        log_message(f"✅ 用戶 {user_id} 降級批次處理完成 ({batch_result.success_rate:.0f}% 成功率)")
+        log_message(
+            f"✅ 用戶 {user_id} 降級批次處理完成 ({batch_result.success_rate:.0f}% 成功率)"
+        )
 
     except Exception as e:
         log_message(f"❌ 批次處理回調錯誤: {e}", "ERROR")
@@ -827,7 +849,9 @@ async def process_media_group_photos(
 
         # 🚀 直接使用超高速批次處理器（避免重複收集）
         if ultra_fast_processor and photo_count > 1:
-            log_message(f"📦 媒體群組直接使用超高速批次處理 {media_group_id} ({photo_count} 張圖片)")
+            log_message(
+                f"📦 媒體群組直接使用超高速批次處理 {media_group_id} ({photo_count} 張圖片)"
+            )
 
             try:
                 # 並行下載所有圖片
@@ -856,7 +880,9 @@ async def process_media_group_photos(
                         log_message(f"❌ 媒體群組第 {i+1} 張圖片下載失敗: {result}")
 
                 if telegram_files:
-                    log_message(f"🚀 開始媒體群組超高速批次處理 {len(telegram_files)} 張圖片")
+                    log_message(
+                        f"🚀 開始媒體群組超高速批次處理 {len(telegram_files)} 張圖片"
+                    )
 
                     # 調用超高速批次處理
                     ultra_result = await ultra_fast_processor.process_telegram_photos_batch_ultra_fast(
@@ -885,7 +911,9 @@ async def process_media_group_photos(
                                     }
                                 )
                             except Exception as notion_error:
-                                log_message(f"❌ Notion 存儲失敗: {notion_error}", "ERROR")
+                                log_message(
+                                    f"❌ Notion 存儲失敗: {notion_error}", "ERROR"
+                                )
                                 notion_results.append(
                                     {
                                         "success": False,
@@ -904,9 +932,15 @@ async def process_media_group_photos(
                         result_message += f"• 成功處理: {len(success_cards)} 張名片\n"
                         result_message += f"• 處理失敗: {len(failed_cards)} 張\n\n"
                         result_message += f"⚡ **效能表現:**\n"
-                        result_message += f"• 總耗時: {ultra_result.total_time:.1f} 秒\n"
-                        result_message += f"• 效能等級: {ultra_result.performance_grade}\n"
-                        result_message += f"• 時間節省: {ultra_result.time_saved:.1f} 秒\n\n"
+                        result_message += (
+                            f"• 總耗時: {ultra_result.total_time:.1f} 秒\n"
+                        )
+                        result_message += (
+                            f"• 效能等級: {ultra_result.performance_grade}\n"
+                        )
+                        result_message += (
+                            f"• 時間節省: {ultra_result.time_saved:.1f} 秒\n\n"
+                        )
 
                         if success_cards:
                             result_message += f"✅ **成功處理的名片:**\n"
@@ -976,7 +1010,9 @@ async def handle_photo_message(
 
     # 🚨 Critical Fix: 媒體群組圖片完全跳過個別處理，避免重複收集
     if update.message.media_group_id:
-        log_message(f"📸 檢測到媒體群組 {update.message.media_group_id}，轉交媒體群組處理器")
+        log_message(
+            f"📸 檢測到媒體群組 {update.message.media_group_id}，轉交媒體群組處理器"
+        )
         await handle_media_group_message(update, context)
         log_message(f"✅ 媒體群組圖片處理完成，跳過個別圖片邏輯")
         return  # 🚨 Critical: 完全退出，不執行後續邏輯
@@ -1018,7 +1054,9 @@ async def handle_photo_message(
                         f"📊 用戶 {user_id} 增強處理器結果: {file_result['success'] if file_result else 'None'}"
                     )
                 except Exception as e:
-                    log_message(f"⚠️ 用戶 {user_id} 增強處理器下載失敗，降級到基礎處理器: {e}")
+                    log_message(
+                        f"⚠️ 用戶 {user_id} 增強處理器下載失敗，降級到基礎處理器: {e}"
+                    )
 
             if not file_result and telegram_bot_handler:
                 log_message(f"🔄 用戶 {user_id} 嘗試使用基礎處理器下載圖片")
@@ -1041,7 +1079,9 @@ async def handle_photo_message(
                         metadata={"message_id": update.message.message_id},
                     )
 
-                    log_message(f"📥 用戶 {user_id} 圖片已添加到批次收集器: {collection_result}")
+                    log_message(
+                        f"📥 用戶 {user_id} 圖片已添加到批次收集器: {collection_result}"
+                    )
                     log_message(f"🚀 用戶 {user_id} 圖片處理完成，交由批次收集器處理")
                     return  # 批次收集器會處理後續邏輯
 
@@ -1052,9 +1092,13 @@ async def handle_photo_message(
                     log_message(f"完整錯誤堆疊: {traceback.format_exc()}", "ERROR")
 
                     # 批次收集器失敗，回退到原邏輯
-                    log_message(f"⚠️ 用戶 {user_id} 批次收集器失敗，回退到原邏輯", "WARNING")
+                    log_message(
+                        f"⚠️ 用戶 {user_id} 批次收集器失敗，回退到原邏輯", "WARNING"
+                    )
             else:
-                log_message(f"❌ 用戶 {user_id} 圖片下載失敗，file_result: {file_result}")
+                log_message(
+                    f"❌ 用戶 {user_id} 圖片下載失敗，file_result: {file_result}"
+                )
                 log_message(f"❌ 用戶 {user_id} 圖片下載失敗，直接返回錯誤")
                 # 🔧 Critical Fix: 批次收集器失敗時完全跳出，避免與原邏輯衝突
                 await safe_telegram_send(
@@ -1079,7 +1123,8 @@ async def handle_photo_message(
             session_info = batch_manager.get_session_info(user_id)
             current_count = session_info["total_count"] + 1 if session_info else 1
             processing_message = (
-                f"📸 批次模式 - 正在處理第 {current_count} 張名片，請稍候...\n" f"⏱️ 預計需要 30-60 秒完成處理"
+                f"📸 批次模式 - 正在處理第 {current_count} 張名片，請稍候...\n"
+                f"⏱️ 預計需要 30-60 秒完成處理"
             )
         else:
             processing_message = (
@@ -1332,7 +1377,10 @@ async def handle_photo_message(
             )
         elif "api" in error_str or "quota" in error_str:
             error_msg = (
-                "🔑 **API 服務問題**\n\n" "• ⏰ AI 服務暫時不可用\n" "• 🔄 請稍後重試\n" "• 📞 如問題持續，請聯繫管理員"
+                "🔑 **API 服務問題**\n\n"
+                "• ⏰ AI 服務暫時不可用\n"
+                "• 🔄 請稍後重試\n"
+                "• 📞 如問題持續，請聯繫管理員"
             )
         else:
             error_msg = (
@@ -1663,7 +1711,9 @@ def telegram_webhook():
                                         try:
                                             await enhanced_telegram_handler._cleanup_connection_pool()
                                         except Exception as cleanup_error:
-                                            log_message(f"⚠️ 連接池清理失敗: {cleanup_error}")
+                                            log_message(
+                                                f"⚠️ 連接池清理失敗: {cleanup_error}"
+                                            )
                                 else:
                                     log_message(
                                         f"❌ 處理更新時發生錯誤: {process_error}",
@@ -1848,18 +1898,22 @@ def env_diagnostic():
 
         # 檢查 Config 類狀態
         config_vars = {
-            "TELEGRAM_BOT_TOKEN": bool(Config.TELEGRAM_BOT_TOKEN.strip())
-            if Config.TELEGRAM_BOT_TOKEN
-            else False,
-            "GOOGLE_API_KEY": bool(Config.GOOGLE_API_KEY.strip())
-            if Config.GOOGLE_API_KEY
-            else False,
-            "NOTION_API_KEY": bool(Config.NOTION_API_KEY.strip())
-            if Config.NOTION_API_KEY
-            else False,
-            "NOTION_DATABASE_ID": bool(Config.NOTION_DATABASE_ID.strip())
-            if Config.NOTION_DATABASE_ID
-            else False,
+            "TELEGRAM_BOT_TOKEN": (
+                bool(Config.TELEGRAM_BOT_TOKEN.strip())
+                if Config.TELEGRAM_BOT_TOKEN
+                else False
+            ),
+            "GOOGLE_API_KEY": (
+                bool(Config.GOOGLE_API_KEY.strip()) if Config.GOOGLE_API_KEY else False
+            ),
+            "NOTION_API_KEY": (
+                bool(Config.NOTION_API_KEY.strip()) if Config.NOTION_API_KEY else False
+            ),
+            "NOTION_DATABASE_ID": (
+                bool(Config.NOTION_DATABASE_ID.strip())
+                if Config.NOTION_DATABASE_ID
+                else False
+            ),
         }
 
         # 配置驗證
@@ -1876,16 +1930,18 @@ def env_diagnostic():
             },
             "configuration": {
                 "config_valid": config_valid_status,
-                "processors_initialized": processors_valid
-                if "processors_valid" in globals()
-                else False,
+                "processors_initialized": (
+                    processors_valid if "processors_valid" in globals() else False
+                ),
             },
             "diagnosis": {
                 "all_env_vars_set": sum(env_vars.values()) == 4,
                 "all_config_vars_loaded": sum(config_vars.values()) == 4,
-                "system_ready": config_valid_status and processors_valid
-                if "processors_valid" in globals()
-                else False,
+                "system_ready": (
+                    config_valid_status and processors_valid
+                    if "processors_valid" in globals()
+                    else False
+                ),
             },
             "recommendations": get_diagnostic_recommendations(
                 env_vars, config_vars, config_valid_status

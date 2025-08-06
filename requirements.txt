@@ -25,4 +25,4 @@ requests==2.31.0
 aiofiles==23.2.1
 
 # HTTP 處理
-aiohttp==3.9.1
+aiohttp>=3.9.1
