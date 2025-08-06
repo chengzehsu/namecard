@@ -3,11 +3,16 @@ Unit tests for NameCardProcessor - 名片處理器測試
 """
 
 import json
+import os
+import sys
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from name_card_processor import NameCardProcessor
+# 添加項目根目錄到 Python 路徑
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../"))
+
+from src.namecard.infrastructure.ai.card_processor import NameCardProcessor
 
 
 class TestNameCardProcessor:
@@ -18,14 +23,14 @@ class TestNameCardProcessor:
         with (
             patch("google.generativeai.configure"),
             patch("google.generativeai.GenerativeModel"),
-            patch("name_card_processor.AddressNormalizer"),
+            patch("src.namecard.infrastructure.ai.card_processor.AddressNormalizer"),
         ):
             self.processor = NameCardProcessor()
 
     @pytest.mark.unit
     @patch("google.generativeai.configure")
     @patch("google.generativeai.GenerativeModel")
-    @patch("name_card_processor.AddressNormalizer")
+    @patch("src.namecard.infrastructure.ai.card_processor.AddressNormalizer")
     def test_init_success(self, mock_normalizer, mock_model, mock_configure):
         """測試成功初始化"""
         mock_model_instance = Mock()
@@ -63,7 +68,7 @@ class TestNameCardProcessor:
         assert result["error"] == "沒有圖像數據"
 
     @pytest.mark.unit
-    @patch("name_card_processor.Image")
+    @patch("src.namecard.infrastructure.ai.card_processor.Image")
     def test_extract_info_from_image_success(self, mock_image):
         """測試成功提取名片資訊"""
         # Mock PIL Image
@@ -107,7 +112,7 @@ class TestNameCardProcessor:
         self.processor.address_normalizer.normalize_address.assert_called_once()
 
     @pytest.mark.unit
-    @patch("name_card_processor.Image")
+    @patch("src.namecard.infrastructure.ai.card_processor.Image")
     def test_extract_info_from_image_with_address_warnings(self, mock_image):
         """測試帶有地址警告的名片處理"""
         # Mock PIL Image
@@ -140,7 +145,7 @@ class TestNameCardProcessor:
         assert result["_original_address"] == "不完整地址"
 
     @pytest.mark.unit
-    @patch("name_card_processor.Image")
+    @patch("src.namecard.infrastructure.ai.card_processor.Image")
     def test_extract_info_from_image_no_address(self, mock_image):
         """測試沒有地址的名片處理"""
         # Mock PIL Image
@@ -161,7 +166,7 @@ class TestNameCardProcessor:
         self.processor.address_normalizer.normalize_address.assert_not_called()
 
     @pytest.mark.unit
-    @patch("name_card_processor.Image")
+    @patch("src.namecard.infrastructure.ai.card_processor.Image")
     def test_extract_info_from_image_gemini_error(self, mock_image):
         """測試 Gemini API 錯誤"""
         # Mock PIL Image
@@ -180,7 +185,7 @@ class TestNameCardProcessor:
         assert "Gemini API error" in result["error"]
 
     @pytest.mark.unit
-    @patch("name_card_processor.Image")
+    @patch("src.namecard.infrastructure.ai.card_processor.Image")
     def test_extract_info_from_image_invalid_json(self, mock_image):
         """測試無效的 JSON 回應"""
         # Mock PIL Image
@@ -200,7 +205,7 @@ class TestNameCardProcessor:
         assert result["raw_response"] == "Invalid JSON response"
 
     @pytest.mark.unit
-    @patch("name_card_processor.Image")
+    @patch("src.namecard.infrastructure.ai.card_processor.Image")
     def test_extract_info_from_image_non_dict_response(self, mock_image):
         """測試非字典格式的回應"""
         # Mock PIL Image
@@ -219,7 +224,7 @@ class TestNameCardProcessor:
         assert "Gemini 返回的不是有效的 JSON 對象" in result["error"]
 
     @pytest.mark.unit
-    @patch("name_card_processor.Image")
+    @patch("src.namecard.infrastructure.ai.card_processor.Image")
     def test_extract_info_from_image_json_with_code_blocks(self, mock_image):
         """測試包含程式碼區塊的 JSON 回應"""
         # Mock PIL Image
@@ -247,7 +252,7 @@ class TestNameCardProcessor:
         assert result["company"] == "公司"
 
     @pytest.mark.unit
-    @patch("name_card_processor.Image")
+    @patch("src.namecard.infrastructure.ai.card_processor.Image")
     def test_extract_info_from_image_pil_error(self, mock_image):
         """測試 PIL 圖像處理錯誤"""
         # Mock PIL Image error

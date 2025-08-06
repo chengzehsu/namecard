@@ -1,0 +1,151 @@
+name: 測試覆蓋率監控
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # 每日執行一次覆蓋率檢查
+    - cron: '0 8 * * *'
+
+jobs:
+  coverage:
+    name: 📊 測試覆蓋率分析
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.9, 3.11]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: 設置 Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-html coverage
+
+    - name: 運行測試覆蓋率分析
+      run: |
+        python -m pytest \
+          --cov=src/namecard \
+          --cov-report=term-missing \
+          --cov-report=xml:coverage.xml \
+          --cov-report=json:coverage.json \
+          --cov-report=html:htmlcov \
+          --cov-fail-under=85 \
+          -v
+
+    - name: 生成覆蓋率徽章
+      if: matrix.python-version == '3.11'
+      run: |
+        pip install coverage-badge
+        coverage-badge -o coverage.svg
+
+    - name: 上傳覆蓋率報告到 Codecov
+      if: matrix.python-version == '3.11'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: true
+
+    - name: 上傳 HTML 覆蓋率報告
+      if: matrix.python-version == '3.11'
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: htmlcov/
+
+    - name: 覆蓋率趨勢檢查
+      if: matrix.python-version == '3.11'
+      run: |
+        python -c "
+        import json
+        with open('coverage.json', 'r') as f:
+            data = json.load(f)
+        coverage = data['totals']['percent_covered']
+        print(f'當前覆蓋率: {coverage:.2f}%')
+
+        if coverage < 85:
+            print('❌ 覆蓋率低於目標 85%')
+            exit(1)
+        elif coverage >= 90:
+            print('🎉 覆蓋率優秀 (≥90%)')
+        else:
+            print('✅ 覆蓋率達標')
+        "
+
+    - name: 覆蓋率評論 (PR)
+      if: github.event_name == 'pull_request' && matrix.python-version == '3.11'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const coverage = JSON.parse(fs.readFileSync('coverage.json', 'utf8'));
+          const coveragePercent = coverage.totals.percent_covered.toFixed(2);
+
+          const comment = `## 📊 測試覆蓋率報告
+
+          **整體覆蓋率**: ${coveragePercent}%
+
+          ${coveragePercent >= 90 ? '🎉 優秀!' :
+            coveragePercent >= 85 ? '✅ 達標' : '❌ 需要改善'}
+
+          **目標**: 85%
+          **狀態**: ${coveragePercent >= 85 ? '通過' : '未通過'}
+
+          詳細報告請查看 Actions 中的 coverage-report artifact。
+          `;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  coverage-diff:
+    name: 📈 覆蓋率變化分析
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 設置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
+    - name: 安裝依賴
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov diff-cover
+
+    - name: 運行覆蓋率 (當前分支)
+      run: |
+        python -m pytest --cov=src/namecard --cov-report=xml:coverage-current.xml
+
+    - name: 切換到基礎分支
+      run: |
+        git checkout ${{ github.base_ref }}
+
+    - name: 運行覆蓋率 (基礎分支)
+      run: |
+        python -m pytest --cov=src/namecard --cov-report=xml:coverage-base.xml || true
+
+    - name: 比較覆蓋率差異
+      run: |
+        diff-cover coverage-current.xml --compare-branch=origin/${{ github.base_ref }} --fail-under=85
