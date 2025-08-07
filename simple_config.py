@@ -40,30 +40,24 @@ class Config:
         # 基礎必要配置
         required_fields = ["GOOGLE_API_KEY", "NOTION_API_KEY", "NOTION_DATABASE_ID"]
 
-        # LINE Bot 特定配置（如果要使用 LINE Bot）
-        line_fields = ["LINE_CHANNEL_ACCESS_TOKEN", "LINE_CHANNEL_SECRET"]
-
         missing = []
         for field in required_fields:
             if not getattr(cls, field):
                 missing.append(field)
 
-        # 檢查 LINE Bot 配置（如果任一存在，則兩者都必須存在）
-        line_token = getattr(cls, "LINE_CHANNEL_ACCESS_TOKEN", "")
-        line_secret = getattr(cls, "LINE_CHANNEL_SECRET", "")
-
-        if line_token or line_secret:  # 如果設置了任一個
-            for field in line_fields:
-                if not getattr(cls, field):
-                    missing.append(field)
-
         if missing:
             print(f"❌ 缺少必要配置: {', '.join(missing)}")
-            print(
-                "💡 LINE Bot 需要設置: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET"
-            )
             return False
 
+        # 檢查 LINE Bot 配置（警告但不阻止啟動）
+        line_token = getattr(cls, "LINE_CHANNEL_ACCESS_TOKEN", "")
+        line_secret = getattr(cls, "LINE_CHANNEL_SECRET", "")
+        
+        if not line_token or not line_secret:
+            print("⚠️  LINE Bot 配置不完整")
+            print("💡 完整功能需要設置: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET")
+            print("🚀 應用將以基礎模式啟動")
+        
         print("✅ 配置驗證通過")
         return True
 
