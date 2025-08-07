@@ -189,9 +189,9 @@ jobs:
       run: |
         echo "🚀 開始部署到 Zeabur (更新現有服務)..."
         
-        # 使用現有的專案和服務名稱（從日誌中確認的實際名稱）
+        # 創建新服務實例避免緩存問題
         PROJECT_NAME="namecard-bot"
-        SERVICE_NAME="namecard-app"
+        SERVICE_NAME="namecard-app-v2"
         
         echo "📋 目標配置:"
         echo "- 專案: $PROJECT_NAME"
@@ -215,24 +215,14 @@ jobs:
         echo "🔧 更新現有服務到 LINE Bot..."
         echo "📋 使用 zeabur deploy 命令部署..."
         
-        # 強制重建並部署，清除所有緩存
-        echo "🔧 強制清除緩存並重新構建..."
+        # 創建全新服務實例，避免所有緩存問題
+        echo "🆕 創建新服務實例以避免緩存問題..."
         
-        # 嘗試停止服務以強制重建
-        echo "🛑 嘗試停止現有服務..."
-        $HOME/.zeabur/bin/zeabur service stop \
-          --project="68885a362fbe6dd524f69c9c" \
-          --name="$SERVICE_NAME" || true
-        
-        # 等待服務停止
-        sleep 5
-        
-        # 強制部署新版本
+        # 部署新服務實例  
         DEPLOY_OUTPUT=$($HOME/.zeabur/bin/zeabur deploy \
           --project="68885a362fbe6dd524f69c9c" \
           --name="$SERVICE_NAME" \
-          --create=false \
-          --force 2>&1)
+          --create=true 2>&1)
         
         echo "$DEPLOY_OUTPUT"
         
