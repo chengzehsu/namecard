@@ -253,7 +253,7 @@ jobs:
         echo "🔧 設置 Zeabur 環境變數..."
         
         PROJECT_NAME="namecard-bot"
-        SERVICE_NAME="namecard-app"
+        SERVICE_NAME="namecard-app-v2"
         
         # 設置所有必要的環境變數
         env_vars=(
