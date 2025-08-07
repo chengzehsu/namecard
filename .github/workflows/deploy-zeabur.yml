@@ -148,10 +148,40 @@ jobs:
       run: |
         echo "⚙️ 創建 Zeabur 部署配置..."
         
-        # 使用現有的 zeabur.json 配置文件 (LINE Bot)
-        echo "使用現有的 zeabur.json 配置:"
+        # 創建強制重建的配置文件
+        cat > zeabur.json << END_OF_CONFIG
+        {
+          "build": {
+            "command": "pip install -r requirements.txt",
+            "force": true,
+            "nocache": true
+          },
+          "environment": {
+            "FLASK_ENV": "production",
+            "PORT": "5002",
+            "PYTHONUNBUFFERED": "1",
+            "PYTHON_VERSION": "3.9",
+            "SERVICE_TYPE": "line-bot",
+            "FORCE_REBUILD": "$(date +%s)"
+          },
+          "healthcheck": {
+            "interval": 30,
+            "path": "/health",
+            "retries": 3,
+            "timeout": 10
+          },
+          "name": "line-bot-namecard",
+          "port": 5002,
+          "regions": [
+            "hkg"
+          ],
+          "start": {
+            "command": "python app.py"
+          }
+        }
+        END_OF_CONFIG
         
-        echo "✅ 配置文件已創建"
+        echo "✅ 強制重建配置已創建"
         cat zeabur.json
         
     - name: 部署到 Zeabur
@@ -185,11 +215,24 @@ jobs:
         echo "🔧 更新現有服務到 LINE Bot..."
         echo "📋 使用 zeabur deploy 命令部署..."
         
-        # 使用非互動模式部署，指定專案 ID
+        # 強制重建並部署，清除所有緩存
+        echo "🔧 強制清除緩存並重新構建..."
+        
+        # 嘗試停止服務以強制重建
+        echo "🛑 嘗試停止現有服務..."
+        $HOME/.zeabur/bin/zeabur service stop \
+          --project="68885a362fbe6dd524f69c9c" \
+          --name="$SERVICE_NAME" || true
+        
+        # 等待服務停止
+        sleep 5
+        
+        # 強制部署新版本
         DEPLOY_OUTPUT=$($HOME/.zeabur/bin/zeabur deploy \
           --project="68885a362fbe6dd524f69c9c" \
           --name="$SERVICE_NAME" \
-          --create=false 2>&1)
+          --create=false \
+          --force 2>&1)
         
         echo "$DEPLOY_OUTPUT"
         
