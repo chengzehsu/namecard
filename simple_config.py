@@ -52,12 +52,12 @@ class Config:
         # 檢查 LINE Bot 配置（警告但不阻止啟動）
         line_token = getattr(cls, "LINE_CHANNEL_ACCESS_TOKEN", "")
         line_secret = getattr(cls, "LINE_CHANNEL_SECRET", "")
-        
+
         if not line_token or not line_secret:
             print("⚠️  LINE Bot 配置不完整")
             print("💡 完整功能需要設置: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET")
             print("🚀 應用將以基礎模式啟動")
-        
+
         print("✅ 配置驗證通過")
         return True
 
