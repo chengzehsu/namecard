@@ -67,11 +67,11 @@ if Config.LINE_CHANNEL_ACCESS_TOKEN and Config.LINE_CHANNEL_SECRET:
         line_bot_api = LineBotApi(Config.LINE_CHANNEL_ACCESS_TOKEN)
         handler = WebhookHandler(Config.LINE_CHANNEL_SECRET)
         safe_line_bot = LineBotApiHandler(Config.LINE_CHANNEL_ACCESS_TOKEN)
-        
+
         # 註冊事件處理器
         handler.add(MessageEvent, message=TextMessage)(handle_text_message)
         handler.add(MessageEvent, message=ImageMessage)(handle_image_message)
-        
+
         log_message("✅ LINE Bot 初始化成功")
     except Exception as e:
         log_message(f"⚠️ LINE Bot 初始化失敗: {e}", "WARNING")
