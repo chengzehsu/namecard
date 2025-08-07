@@ -62,7 +62,9 @@ class Config:
 
         if missing:
             print(f"❌ 缺少必要配置: {', '.join(missing)}")
-            print("💡 LINE Bot 需要設置: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET")
+            print(
+                "💡 LINE Bot 需要設置: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET"
+            )
             return False
 
         print("✅ 配置驗證通過")
@@ -72,18 +74,22 @@ class Config:
     def show_config(cls):
         """顯示目前配置（隱藏敏感資訊）"""
         print("📋 目前配置:")
-        token_status = '[已設置]' if cls.LINE_CHANNEL_ACCESS_TOKEN else '[未設置]'
+        token_status = "[已設置]" if cls.LINE_CHANNEL_ACCESS_TOKEN else "[未設置]"
         print(f"  LINE_CHANNEL_ACCESS_TOKEN: {token_status}")
         print(
             f"  LINE_CHANNEL_SECRET: {'[已設置]' if cls.LINE_CHANNEL_SECRET else '[未設置]'}"
         )
-        print(f"  TELEGRAM_BOT_TOKEN: {'[已設置]' if cls.TELEGRAM_BOT_TOKEN else '[未設置]'}")
+        print(
+            f"  TELEGRAM_BOT_TOKEN: {'[已設置]' if cls.TELEGRAM_BOT_TOKEN else '[未設置]'}"
+        )
         print(f"  GOOGLE_API_KEY: {'[已設置]' if cls.GOOGLE_API_KEY else '[未設置]'}")
-        fallback_status = '[已設置]' if cls.GOOGLE_API_KEY_FALLBACK else '[未設置]'
+        fallback_status = "[已設置]" if cls.GOOGLE_API_KEY_FALLBACK else "[未設置]"
         print(f"  GOOGLE_API_KEY_FALLBACK: {fallback_status}")
         print(f"  GEMINI_MODEL: {cls.GEMINI_MODEL}")
         print(f"  NOTION_API_KEY: {'[已設置]' if cls.NOTION_API_KEY else '[未設置]'}")
-        print(f"  NOTION_DATABASE_ID: {'[已設置]' if cls.NOTION_DATABASE_ID else '[未設置]'}")
+        print(
+            f"  NOTION_DATABASE_ID: {'[已設置]' if cls.NOTION_DATABASE_ID else '[未設置]'}"
+        )
         print(f"  MAX_CONCURRENT: {cls.MAX_CONCURRENT}")
         print(f"  CACHE_MEMORY_MB: {cls.CACHE_MEMORY_MB}")
         print(f"  WORKERS: {cls.WORKERS}")
