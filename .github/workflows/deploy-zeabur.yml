@@ -1,4 +1,4 @@
-name: 部署到 Zeabur
+name: 部署 LINE Bot 到 Zeabur
 
 on:
   # 手動觸發或在有 ZEABUR_TOKEN 時自動部署
@@ -51,19 +51,19 @@ jobs:
     - name: 安裝依賴
       run: |
         python -m pip install --upgrade pip
-        pip install -r deployment/environments/production/requirements-telegram.txt
+        pip install -r requirements.txt
         
     - name: 快速語法檢查
       run: |
         echo "🔍 執行快速語法檢查..."
-        python -m py_compile main.py
-        echo "✅ main.py 語法檢查通過"
+        python -m py_compile app.py
+        echo "✅ app.py 語法檢查通過"
         
-        python -m py_compile src/namecard/api/telegram_bot/telegram_main.py
-        echo "✅ telegram_main.py 語法檢查通過"
+        python -m py_compile simple_config.py
+        echo "✅ simple_config.py 語法檢查通過"
         
         # 檢查主要模組是否可以編譯
-        python -m py_compile config/base.py
+        python -m py_compile src/namecard/api/line_bot/main.py
         python -m py_compile src/namecard/infrastructure/ai/card_processor.py
         python -m py_compile src/namecard/infrastructure/storage/notion_client.py
         echo "✅ 核心模組語法檢查通過"
@@ -73,7 +73,7 @@ jobs:
         echo "📋 檢查部署必要文件..."
         
         # 檢查必要文件
-        files=("main.py" "src/namecard/api/telegram_bot/telegram_main.py" "deployment/environments/production/requirements-telegram.txt" "config/base.py")
+        files=("app.py" "simple_config.py" "requirements.txt" "zeabur.json")
         for file in "${files[@]}"; do
           if [ -f "$file" ]; then
             echo "✅ $file 存在"
@@ -83,9 +83,9 @@ jobs:
           fi
         done
         
-        # 檢查 requirements-telegram.txt 內容
+        # 檢查 requirements.txt 內容
         echo "📦 檢查 Python 依賴:"
-        cat deployment/environments/production/requirements-telegram.txt
+        cat requirements.txt
         
         echo "✅ 部署檢查完成"
 
@@ -148,26 +148,8 @@ jobs:
       run: |
         echo "⚙️ 創建 Zeabur 部署配置..."
         
-        # 創建 zeabur.json 配置文件 (Telegram Bot)
-        cat > zeabur.json << END_OF_CONFIG
-        {
-          "name": "namecard-telegram-bot",
-          "type": "python",
-          "buildCommand": "pip install -r deployment/environments/production/requirements-telegram.txt",
-          "startCommand": "python main.py",
-          "environment": {
-            "PYTHON_VERSION": "3.9",
-            "PORT": "5003",
-            "FLASK_ENV": "production",
-            "PYTHONUNBUFFERED": "1"
-          },
-          "regions": ["hkg"],
-          "scaling": {
-            "minInstances": 1,
-            "maxInstances": 2
-          }
-        }
-        END_OF_CONFIG
+        # 使用現有的 zeabur.json 配置文件 (LINE Bot)
+        echo "使用現有的 zeabur.json 配置:"
         
         echo "✅ 配置文件已創建"
         cat zeabur.json
@@ -185,7 +167,7 @@ jobs:
         echo "- 專案: $PROJECT_NAME"
         echo "- 服務: $SERVICE_NAME" 
         echo "- URL: https://namecard-app.zeabur.app"
-        echo "- 應用類型: Telegram Bot (main.py)"
+        echo "- 應用類型: LINE Bot (app.py)"
         
         # 檢查專案是否存在
         echo "📋 列出所有專案:"
@@ -200,7 +182,7 @@ jobs:
         fi
         
         # 部署到現有服務 (使用正確的 zeabur deploy 命令)
-        echo "🔧 更新現有服務到 Telegram Bot..."
+        echo "🔧 更新現有服務到 LINE Bot..."
         echo "📋 使用 zeabur deploy 命令部署..."
         
         # 使用非互動模式部署，指定專案 ID
@@ -223,12 +205,13 @@ jobs:
         APP_URL="https://namecard-app.zeabur.app"
         echo "✅ 部署完成!"
         echo "🔗 應用 URL: $APP_URL"
-        echo "📝 服務已更新為 Telegram Bot 配置"
+        echo "📝 服務已更新為 LINE Bot 配置"
         echo "app_url=$APP_URL" >> $GITHUB_OUTPUT
         
     - name: 設置環境變數
       env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         GOOGLE_API_KEY_FALLBACK: ${{ secrets.GOOGLE_API_KEY_FALLBACK }}
         NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
@@ -241,12 +224,13 @@ jobs:
         
         # 設置所有必要的環境變數
         env_vars=(
-          "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN"
+          "LINE_CHANNEL_ACCESS_TOKEN=$LINE_CHANNEL_ACCESS_TOKEN"
+          "LINE_CHANNEL_SECRET=$LINE_CHANNEL_SECRET"
           "GOOGLE_API_KEY=$GOOGLE_API_KEY"
           "GOOGLE_API_KEY_FALLBACK=$GOOGLE_API_KEY_FALLBACK"
           "NOTION_API_KEY=$NOTION_API_KEY"
           "NOTION_DATABASE_ID=$NOTION_DATABASE_ID"
-          "PORT=5003"
+          "PORT=5002"
           "FLASK_ENV=production"
           "PYTHONUNBUFFERED=1"
         )
@@ -305,7 +289,7 @@ jobs:
             echo "- 🔗 應用 URL: $APP_URL"
             echo "- 🏥 健康檢查: $APP_URL/health"
             echo "- 🧪 測試端點: $APP_URL/test"
-            echo "- 📞 Webhook URL: $APP_URL/telegram-webhook"
+            echo "- 📞 Webhook URL: $APP_URL/callback"
             
             exit 0
           fi
@@ -317,24 +301,21 @@ jobs:
         echo "⚠️ 健康檢查失敗，但不影響部署流程"
         echo "請手動檢查應用狀態: $APP_URL"
         
-    - name: 更新 Telegram Bot Webhook URL 提醒
+    - name: 更新 LINE Bot Webhook URL 提醒
       if: steps.deploy.outputs.app_url != ''
       run: |
-        echo "📢 重要提醒: 設置 Telegram Bot Webhook URL"
+        echo "📢 重要提醒: 設置 LINE Bot Webhook URL"
         echo ""
-        echo "請使用以下指令設置 Telegram Bot Webhook:"
-        echo "🔗 新的 Webhook URL: ${{ steps.deploy.outputs.app_url }}/telegram-webhook"
+        echo "請在 LINE Developer Console 設置 Webhook URL:"
+        echo "🔗 新的 Webhook URL: ${{ steps.deploy.outputs.app_url }}/callback"
         echo ""
         echo "步驟:"
-        echo "1. 使用 curl 或 Postman 執行以下請求:"
-        echo "POST https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook"
-        echo "Body: {\"url\": \"${{ steps.deploy.outputs.app_url }}/telegram-webhook\"}"
+        echo "1. 登入 LINE Developer Console"
+        echo "2. 選擇您的 Channel"
+        echo "3. 在 Messaging API 設定中更新 Webhook URL"
+        echo "4. 確保 Webhook 設定為 Enabled"
         echo ""
-        echo "2. 或在瀏覽器中訪問:"
-        echo "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=${{ steps.deploy.outputs.app_url }}/telegram-webhook"
-        echo ""
-        echo "3. 驗證 webhook 設置:"
-        echo "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo"
+        echo "📱 LINE Bot 現已部署並可接收訊息!"
 
   # 部署後測試
   post-deploy-tests:
@@ -357,12 +338,12 @@ jobs:
           echo "❌ 健康檢查端點異常"
         fi
         
-        # 測試 Telegram webhook 端點
-        echo "📞 測試 Telegram webhook 端點..."
-        if curl -f -s "$APP_URL/telegram-webhook"; then
-          echo "✅ Telegram webhook 端點可訪問"
+        # 測試 LINE Bot webhook 端點
+        echo "📞 測試 LINE Bot webhook 端點..."
+        if curl -f -s "$APP_URL/callback"; then
+          echo "✅ LINE Bot webhook 端點可訪問"
         else
-          echo "❌ Telegram webhook 端點不可訪問 (可能需要 POST 請求)"
+          echo "❌ LINE Bot webhook 端點不可訪問 (可能需要 POST 請求)"
         fi
         
         echo "✅ 部署後測試完成"
@@ -389,13 +370,13 @@ jobs:
           
           if [ -n "$APP_URL" ]; then
             echo "🔗 **應用 URL:** $APP_URL"
-            echo "📞 **Webhook URL:** $APP_URL/telegram-webhook"
+            echo "📞 **Webhook URL:** $APP_URL/callback"
           fi
           
           echo ""
           echo "📋 **後續步驟:**"
-          echo "1. 設置 Telegram Bot Webhook URL"
-          echo "2. 測試 Telegram Bot 功能"
+          echo "1. 設置 LINE Bot Webhook URL"
+          echo "2. 測試 LINE Bot 功能"
           echo "3. 檢查應用日誌"
           
         else
@@ -413,4 +394,4 @@ jobs:
         echo "🔗 **相關連結:**"
         echo "- [Zeabur Dashboard](https://dash.zeabur.com/)"
         echo "- [查看部署日誌](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-        echo "- [Telegram Bot API](https://core.telegram.org/bots/api)"
+        echo "- [LINE Developer Console](https://developers.line.biz/console/)"
