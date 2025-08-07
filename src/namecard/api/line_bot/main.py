@@ -57,16 +57,26 @@ except Exception as e:
     log_message(f"❌ 配置錯誤: {e}", "ERROR")
     exit(1)
 
-# 初始化 LINE Bot
-if not Config.LINE_CHANNEL_ACCESS_TOKEN or not Config.LINE_CHANNEL_SECRET:
-    log_message("❌ LINE Bot 配置不完整", "ERROR")
-    exit(1)
+# 初始化 LINE Bot（容錯模式）
+line_bot_api = None
+handler = None
+safe_line_bot = None
 
-line_bot_api = LineBotApi(Config.LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(Config.LINE_CHANNEL_SECRET)
-
-# 初始化安全的 LINE Bot API 處理器
-safe_line_bot = LineBotApiHandler(Config.LINE_CHANNEL_ACCESS_TOKEN)
+if Config.LINE_CHANNEL_ACCESS_TOKEN and Config.LINE_CHANNEL_SECRET:
+    try:
+        line_bot_api = LineBotApi(Config.LINE_CHANNEL_ACCESS_TOKEN)
+        handler = WebhookHandler(Config.LINE_CHANNEL_SECRET)
+        safe_line_bot = LineBotApiHandler(Config.LINE_CHANNEL_ACCESS_TOKEN)
+        
+        # 註冊事件處理器
+        handler.add(MessageEvent, message=TextMessage)(handle_text_message)
+        handler.add(MessageEvent, message=ImageMessage)(handle_image_message)
+        
+        log_message("✅ LINE Bot 初始化成功")
+    except Exception as e:
+        log_message(f"⚠️ LINE Bot 初始化失敗: {e}", "WARNING")
+else:
+    log_message("⚠️ LINE Bot 配置不完整，以基礎模式啟動", "WARNING")
 
 # 初始化處理器
 try:
@@ -84,13 +94,16 @@ except Exception as e:
 
 @app.route("/callback", methods=["POST"])
 def callback():
-    """LINE Bot webhook 回調函數 - 嚴格按照 LINE API 規範"""
+    """LINE Bot webhook 回調函數 - 容錯模式"""
 
     # 記錄請求資訊（使用統一日誌函數）
     log_message(f"📥 收到 POST 請求到 /callback")
     log_message(f"📋 Request headers: {dict(request.headers)}")
-    log_message(f"🌍 Remote addr: {request.environ.get('REMOTE_ADDR', 'unknown')}")
-    log_message(f"🔍 User agent: {request.headers.get('User-Agent', 'unknown')}")
+
+    # 檢查 LINE Bot 是否已初始化
+    if not handler or not line_bot_api:
+        log_message("⚠️ LINE Bot 未初始化，無法處理 webhook", "WARNING")
+        return "LINE Bot not configured", 503
 
     # 1. 檢查 Content-Type（LINE 要求 application/json）
     content_type = request.headers.get("Content-Type", "")
@@ -111,7 +124,6 @@ def callback():
         return "Empty request body", 400
 
     log_message(f"📄 Request body length: {len(body)}")
-    log_message(f"📄 Request body preview: {body[:200]}...")
 
     # 4. 驗證簽名並處理 webhook
     try:
@@ -147,7 +159,7 @@ def callback_info():
     }
 
 
-@handler.add(MessageEvent, message=TextMessage)
+# 條件式註冊處理器（只在 handler 存在時註冊）
 def handle_text_message(event):
     """處理文字訊息"""
     user_message = event.message.text.strip()
@@ -305,7 +317,6 @@ def handle_text_message(event):
             safe_line_bot.safe_reply_message(event.reply_token, reply_text)
 
 
-@handler.add(MessageEvent, message=ImageMessage)
 def handle_image_message(event):
     """處理圖片訊息 - 名片識別（支援批次模式）"""
     user_id = event.source.user_id
