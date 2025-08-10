@@ -49,10 +49,14 @@ try:
 
     # 顯示實際配置值狀態
     print(f"\n📊 實際配置狀態:")
-    print(f"TELEGRAM_BOT_TOKEN: {'✅ 有值' if Config.TELEGRAM_BOT_TOKEN else '❌ 空值'}")
+    print(
+        f"TELEGRAM_BOT_TOKEN: {'✅ 有值' if Config.TELEGRAM_BOT_TOKEN else '❌ 空值'}"
+    )
     print(f"GOOGLE_API_KEY: {'✅ 有值' if Config.GOOGLE_API_KEY else '❌ 空值'}")
     print(f"NOTION_API_KEY: {'✅ 有值' if Config.NOTION_API_KEY else '❌ 空值'}")
-    print(f"NOTION_DATABASE_ID: {'✅ 有值' if Config.NOTION_DATABASE_ID else '❌ 空值'}")
+    print(
+        f"NOTION_DATABASE_ID: {'✅ 有值' if Config.NOTION_DATABASE_ID else '❌ 空值'}"
+    )
 
 except ImportError as e:
     print(f"❌ simple_config 導入失敗: {e}")

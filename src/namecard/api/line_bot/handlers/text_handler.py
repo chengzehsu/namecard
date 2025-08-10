@@ -134,7 +134,9 @@ class TextMessageHandler:
             self.safe_line_bot.safe_reply_message(event.reply_token, reply_text)
         else:
             # Send processing message
-            self.safe_line_bot.safe_reply_message(event.reply_token, "🚀 正在創建 PR，請稍候...")
+            self.safe_line_bot.safe_reply_message(
+                event.reply_token, "🚀 正在創建 PR，請稍候..."
+            )
 
             # Create PR
             result = self.pr_creator.create_instant_pr(pr_description)

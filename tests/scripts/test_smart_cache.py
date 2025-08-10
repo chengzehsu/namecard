@@ -556,7 +556,9 @@ async def run_cache_integration_test():
             # 模擬 AI 處理時間
             await asyncio.sleep(0.1)
             if cache_manager.should_cache_result(ai_result):
-                await cache_manager.set(cache_key, ai_result, ttl_seconds=1800)  # 30分鐘
+                await cache_manager.set(
+                    cache_key, ai_result, ttl_seconds=1800
+                )  # 30分鐘
         process_time_1 = time.time() - start_time
 
         # 第二次處理相同圖片（快取命中）

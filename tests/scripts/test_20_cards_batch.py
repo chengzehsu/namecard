@@ -214,7 +214,9 @@ def test_rate_limit_behavior():
                 request_results.append((can_proceed, wait_time))
 
                 if not can_proceed:
-                    print(f"   第 {i+1} 個請求被速率限制阻止，需等待 {wait_time:.1f} 秒")
+                    print(
+                        f"   第 {i+1} 個請求被速率限制阻止，需等待 {wait_time:.1f} 秒"
+                    )
                     break
 
             # 分析結果
@@ -231,7 +233,9 @@ def test_rate_limit_behavior():
             # 檢查是否正確限制
             rate_limit_working = allowed_requests <= 60 and blocked_requests > 0
 
-            print(f"   速率限制機制: {'✅ 正常工作' if rate_limit_working else '❌ 異常'}")
+            print(
+                f"   速率限制機制: {'✅ 正常工作' if rate_limit_working else '❌ 異常'}"
+            )
 
             return rate_limit_working
 

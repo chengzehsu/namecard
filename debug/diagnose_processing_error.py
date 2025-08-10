@@ -141,7 +141,9 @@ def simulate_real_photo_processing():
     print(
         f"   圖片尺寸: {real_photo_update['message']['photo'][-1]['width']}x{real_photo_update['message']['photo'][-1]['height']}"
     )
-    print(f"   文件大小: {real_photo_update['message']['photo'][-1]['file_size']} bytes")
+    print(
+        f"   文件大小: {real_photo_update['message']['photo'][-1]['file_size']} bytes"
+    )
 
     try:
         response = requests.post(
@@ -215,7 +217,9 @@ def check_telegram_bot_api():
             if data.get("ok"):
                 webhook_info = data.get("result", {})
                 print(f"   📍 Webhook URL: {webhook_info.get('url', 'None')}")
-                print(f"   📊 待處理更新: {webhook_info.get('pending_update_count', 0)}")
+                print(
+                    f"   📊 待處理更新: {webhook_info.get('pending_update_count', 0)}"
+                )
 
                 if webhook_info.get("last_error_date"):
                     print(

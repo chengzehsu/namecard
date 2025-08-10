@@ -393,7 +393,9 @@ class TestApiQuotaManager:
         metrics = quota_manager.metrics["key_0"]
         metrics.used_today = 1000
         metrics.status = ApiKeyStatus.QUOTA_EXCEEDED
-        metrics.quota_reset_time = datetime.now() - timedelta(hours=1)  # 1小時前應該重置
+        metrics.quota_reset_time = datetime.now() - timedelta(
+            hours=1
+        )  # 1小時前應該重置
 
         # 獲取最佳 API Key 應該觸發重置
         api_key, key_id = await quota_manager.get_best_api_key()
@@ -408,7 +410,9 @@ class TestApiQuotaManager:
         metrics = quota_manager.metrics["key_0"]
         metrics.requests_this_minute = 60
         metrics.status = ApiKeyStatus.RATE_LIMITED
-        metrics.minute_reset_time = datetime.now() - timedelta(minutes=2)  # 2分鐘前應該重置
+        metrics.minute_reset_time = datetime.now() - timedelta(
+            minutes=2
+        )  # 2分鐘前應該重置
 
         api_key, key_id = await quota_manager.get_best_api_key()
 

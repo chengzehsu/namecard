@@ -793,7 +793,9 @@ async def run_parallel_image_downloader_integration_test():
 
         assert cache_result.success
         assert cache_result.source == "cache"
-        print(f"   - 快取命中時間: {cache_time:.3f}s (提升 {single_time/cache_time:.1f}x)")
+        print(
+            f"   - 快取命中時間: {cache_time:.3f}s (提升 {single_time/cache_time:.1f}x)"
+        )
 
         print("📊 場景3: 批次並行下載")
 

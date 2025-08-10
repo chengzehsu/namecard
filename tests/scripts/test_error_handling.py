@@ -41,7 +41,9 @@ def test_processor_initialization():
     try:
         processor = NameCardProcessor()
         print("✅ 名片處理器初始化成功")
-        print(f"   - 當前使用的 API Key: {'主要' if not processor.using_fallback else '備用'}")
+        print(
+            f"   - 當前使用的 API Key: {'主要' if not processor.using_fallback else '備用'}"
+        )
         print(f"   - 備用 API Key 可用: {'是' if processor.fallback_api_key else '否'}")
         return processor
     except Exception as e:
@@ -65,7 +67,9 @@ def test_error_detection():
 
     for error in quota_errors:
         result = processor._is_quota_exceeded_error(error)
-        print(f"   額度錯誤 '{error[:30]}...': {'✅ 檢測到' if result else '❌ 未檢測到'}")
+        print(
+            f"   額度錯誤 '{error[:30]}...': {'✅ 檢測到' if result else '❌ 未檢測到'}"
+        )
 
     # 測試暫時性錯誤檢測
     transient_errors = [
@@ -78,7 +82,9 @@ def test_error_detection():
 
     for error in transient_errors:
         result = processor._is_transient_error(error)
-        print(f"   暫時錯誤 '{error[:30]}...': {'✅ 檢測到' if result else '❌ 未檢測到'}")
+        print(
+            f"   暫時錯誤 '{error[:30]}...': {'✅ 檢測到' if result else '❌ 未檢測到'}"
+        )
 
 
 def create_test_image():

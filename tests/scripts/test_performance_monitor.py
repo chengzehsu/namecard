@@ -397,7 +397,9 @@ class TestPerformanceMonitor:
 
         # 檢查是否包含預期的建議類型
         rec_text = " ".join(recommendations)
-        assert any(keyword in rec_text for keyword in ["處理時間", "快取", "錯誤率", "重試"])
+        assert any(
+            keyword in rec_text for keyword in ["處理時間", "快取", "錯誤率", "重試"]
+        )
 
     # ==========================================
     # 4. 實時監控測試
@@ -761,7 +763,8 @@ async def run_performance_monitor_integration_test():
                     "card_count": card_count,
                     "overall_quality": quality,
                     "processing_time": processing_time,
-                    "cards": [{"name": f"測試名片{i}", "company": f"公司{i}"}] * card_count,
+                    "cards": [{"name": f"測試名片{i}", "company": f"公司{i}"}]
+                    * card_count,
                 }
                 success = True
 
@@ -786,7 +789,9 @@ async def run_performance_monitor_integration_test():
         print(f"\n📈 批次處理性能分析:")
         print(f"   - 批次總時間: {batch_total_time:.2f}s")
         print(f"   - 處理成功率: {summary['summary']['success_rate']:.1%}")
-        print(f"   - 平均處理時間: {summary['performance']['avg_processing_time_ms']:.0f}ms")
+        print(
+            f"   - 平均處理時間: {summary['performance']['avg_processing_time_ms']:.0f}ms"
+        )
         print(
             f"   - P95 處理時間: {summary['performance']['p95_processing_time_ms']:.0f}ms"
         )
@@ -825,7 +830,9 @@ async def run_performance_monitor_integration_test():
         print(f"   - 統計記錄: ✅ 正確記錄 6 個處理請求")
         print(f"   - 成功率追蹤: ✅ 正確計算 80% 成功率")
         print(f"   - 快取監控: ✅ 正確識別快取命中")
-        print(f"   - 異常檢測: {'✅ 檢測到異常請求' if anomaly_detected else '⚠️ 異常檢測可能需要更多數據'}")
+        print(
+            f"   - 異常檢測: {'✅ 檢測到異常請求' if anomaly_detected else '⚠️ 異常檢測可能需要更多數據'}"
+        )
         print(f"   - 報告生成: ✅ 成功生成詳細報告")
         print(f"   - 建議系統: ✅ 生成了 {len(report['recommendations'])} 條優化建議")
 

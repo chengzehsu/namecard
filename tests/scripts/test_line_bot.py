@@ -65,14 +65,18 @@ class LineBotTester:
                         f"資料庫: {notion_test.get('database_title', 'Unknown')}",
                     )
                 else:
-                    self.log_test("Notion 連接", False, notion_test.get("error", "未知錯誤"))
+                    self.log_test(
+                        "Notion 連接", False, notion_test.get("error", "未知錯誤")
+                    )
 
                 # 測試 Gemini 連接
                 gemini_test = data.get("gemini", {})
                 if gemini_test.get("success"):
                     self.log_test("Gemini AI", True, "AI 服務可用")
                 else:
-                    self.log_test("Gemini AI", False, gemini_test.get("error", "未知錯誤"))
+                    self.log_test(
+                        "Gemini AI", False, gemini_test.get("error", "未知錯誤")
+                    )
             else:
                 self.log_test("服務連接測試", False, f"HTTP {response.status_code}")
         except Exception as e:
@@ -127,7 +131,9 @@ class LineBotTester:
             if not missing_configs:
                 self.log_test("環境變數配置", True, "所有必要配置已設置")
             else:
-                self.log_test("環境變數配置", False, f"缺少: {', '.join(missing_configs)}")
+                self.log_test(
+                    "環境變數配置", False, f"缺少: {', '.join(missing_configs)}"
+                )
 
             # 測試配置驗證方法
             if Config.validate():

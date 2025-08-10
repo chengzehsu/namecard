@@ -275,7 +275,9 @@ def diagnose_media_group_handling():
                 # 檢查計時器狀態
                 timer_task = group_data.get("timer_task")
                 if timer_task:
-                    print(f"    計時器: {'運行中' if not timer_task.done() else '已完成'}")
+                    print(
+                        f"    計時器: {'運行中' if not timer_task.done() else '已完成'}"
+                    )
 
         return True
 

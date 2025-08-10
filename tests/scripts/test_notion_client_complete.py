@@ -121,7 +121,10 @@ class TestNotionClientComplete:
         assert properties["Name"]["title"][0]["text"]["content"] == "張小明"
 
         assert "公司名稱" in properties
-        assert properties["公司名稱"]["rich_text"][0]["text"]["content"] == "科技創新股份有限公司"
+        assert (
+            properties["公司名稱"]["rich_text"][0]["text"]["content"]
+            == "科技創新股份有限公司"
+        )
 
         assert "職稱" in properties
         assert properties["職稱"]["select"]["name"] == "技術總監"
@@ -147,7 +150,9 @@ class TestNotionClientComplete:
 
         assert "Email" not in properties
         assert "Email備註" in properties
-        assert "格式待確認" in properties["Email備註"]["rich_text"][0]["text"]["content"]
+        assert (
+            "格式待確認" in properties["Email備註"]["rich_text"][0]["text"]["content"]
+        )
 
     def test_build_properties_phone_validation(self, notion_manager):
         """測試電話號碼格式驗證"""
@@ -182,7 +187,8 @@ class TestNotionClientComplete:
 
             assert "地址" in properties
             assert (
-                properties["地址"]["rich_text"][0]["text"]["content"] == "台北市信義區信義路五段7號"
+                properties["地址"]["rich_text"][0]["text"]["content"]
+                == "台北市信義區信義路五段7號"
             )
 
         # 測試非台灣地址
@@ -195,7 +201,10 @@ class TestNotionClientComplete:
             properties = notion_manager._build_properties(foreign_address_data)
 
             assert "地址備註" in properties
-            assert "非台灣地址" in properties["地址備註"]["rich_text"][0]["text"]["content"]
+            assert (
+                "非台灣地址"
+                in properties["地址備註"]["rich_text"][0]["text"]["content"]
+            )
 
     def test_build_properties_partial_data(self, notion_manager):
         """測試部分數據的屬性建構"""

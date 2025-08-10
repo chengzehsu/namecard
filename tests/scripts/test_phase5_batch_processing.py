@@ -133,7 +133,9 @@ async def test_batch_processor_callback_integration():
                 found_indicators.append(indicator)
 
         print(f"✅ 找到 Phase 5 指標: {found_indicators}")
-        assert len(found_indicators) >= 2, f"Phase 5 整合不完整，只找到: {found_indicators}"
+        assert (
+            len(found_indicators) >= 2
+        ), f"Phase 5 整合不完整，只找到: {found_indicators}"
 
         return True
 
@@ -173,7 +175,9 @@ async def test_performance_improvement_logic():
             )
 
             # 驗證至少有 2x 改進
-            assert improvement >= 2.0, f"{count} 張圖片的改進不足 2x: {improvement:.1f}x"
+            assert (
+                improvement >= 2.0
+            ), f"{count} 張圖片的改進不足 2x: {improvement:.1f}x"
 
         print("✅ 效能改進邏輯測試通過")
         return True

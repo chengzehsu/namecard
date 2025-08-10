@@ -101,7 +101,9 @@ async def test_core_batch_components():
             results.append(f"processed_{user_id}_{len(images)}")
 
         async def mock_progress_notifier(user_id, chat_id, image_count, action):
-            print(f"   📊 進度通知：用戶 {user_id}，動作 {action}，圖片數 {image_count}")
+            print(
+                f"   📊 進度通知：用戶 {user_id}，動作 {action}，圖片數 {image_count}"
+            )
 
         # 設置回調並啟動收集器
         collector.set_batch_processor(mock_batch_processor)

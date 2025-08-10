@@ -326,7 +326,9 @@ class TestAPIEndpointsIntegration:
             )
 
             # 驗證所有請求都成功
-            assert all(line_results), f"LINE Bot 健康檢查失敗數: {line_results.count(False)}"
+            assert all(
+                line_results
+            ), f"LINE Bot 健康檢查失敗數: {line_results.count(False)}"
             if telegram_results:
                 assert all(
                     telegram_results
@@ -370,7 +372,9 @@ class TestAPIEndpointsIntegration:
         ]
 
         # 驗證連接池穩定性
-        assert len(connection_errors) == 0, f"發現 {len(connection_errors)} 個連接相關錯誤"
+        assert (
+            len(connection_errors) == 0
+        ), f"發現 {len(connection_errors)} 個連接相關錯誤"
         success_rate = len(successful_requests) / len(results)
         assert success_rate >= 0.95, f"成功率過低: {success_rate:.2%} (應該 >= 95%)"
 
@@ -675,8 +679,12 @@ class TestAPIEndpointsIntegration:
         print(f"平均回應時間: {avg_response_time:.3f}s")
 
         # 驗證連接池健康度
-        assert len(connection_errors) == 0, f"發現 {len(connection_errors)} 個連接池錯誤"
-        assert len(timeout_errors) <= 5, f"超時錯誤過多: {len(timeout_errors)} (應該 <= 5)"
+        assert (
+            len(connection_errors) == 0
+        ), f"發現 {len(connection_errors)} 個連接池錯誤"
+        assert (
+            len(timeout_errors) <= 5
+        ), f"超時錯誤過多: {len(timeout_errors)} (應該 <= 5)"
         assert success_rate >= 0.95, f"成功率過低: {success_rate:.2%} (應該 >= 95%)"
 
 

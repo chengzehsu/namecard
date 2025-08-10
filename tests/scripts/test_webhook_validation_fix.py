@@ -59,7 +59,9 @@ def test_invalid_data_handling():
                 print(f"   ✅ 符合預期 (預期: {expected})")
                 results[test_case["name"]] = True
             else:
-                print(f"   ❌ 不符合預期 (預期: {expected}, 實際: {response.status_code})")
+                print(
+                    f"   ❌ 不符合預期 (預期: {expected}, 實際: {response.status_code})"
+                )
                 results[test_case["name"]] = False
 
         except Exception as e:

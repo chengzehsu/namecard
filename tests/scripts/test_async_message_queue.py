@@ -897,7 +897,9 @@ async def run_async_message_queue_integration_test():
 
         # 檢查實際發送的訊息
         emergency_messages = [msg for msg in sent_messages if "緊急" in msg["text"]]
-        batch_summaries = [msg for msg in sent_messages if "**批次處理完成**" in msg["text"]]
+        batch_summaries = [
+            msg for msg in sent_messages if "**批次處理完成**" in msg["text"]
+        ]
 
         print(f"   - 緊急訊息: {len(emergency_messages)} 條 (應該 >0)")
         print(f"   - 批次摘要: {len(batch_summaries)} 條 (應該 >0)")

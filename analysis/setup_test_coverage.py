@@ -737,7 +737,9 @@ responses>=0.23.0
                     "files_count": len(files_coverage),
                     "target_coverage": self.coverage_threshold,
                     "status": (
-                        "達標" if total_coverage >= self.coverage_threshold else "需要改善"
+                        "達標"
+                        if total_coverage >= self.coverage_threshold
+                        else "需要改善"
                     ),
                     "low_coverage_files": [],
                 }
@@ -854,7 +856,9 @@ def main():
     if success:
         print("\n🎉 測試覆蓋率監控系統已成功設置！")
         print("\n🔧 下一步操作:")
-        print("   1. 提交變更到 Git: git add . && git commit -m 'feat: 添加測試覆蓋率監控'")
+        print(
+            "   1. 提交變更到 Git: git add . && git commit -m 'feat: 添加測試覆蓋率監控'"
+        )
         print("   2. 推送到遠程: git push origin main")
         print("   3. 檢查 GitHub Actions 執行結果")
         print("   4. 查看覆蓋率報告並改善低覆蓋率模組")

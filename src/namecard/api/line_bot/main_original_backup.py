@@ -248,7 +248,9 @@ def handle_text_message(event):
             safe_line_bot.safe_reply_message(event.reply_token, reply_text)
         else:
             # Send processing message
-            safe_line_bot.safe_reply_message(event.reply_token, "🚀 正在創建 PR，請稍候...")
+            safe_line_bot.safe_reply_message(
+                event.reply_token, "🚀 正在創建 PR，請稍候..."
+            )
 
             # Create PR
             result = pr_creator.create_instant_pr(pr_description)
@@ -327,7 +329,9 @@ def handle_image_message(event):
         if is_batch_mode:
             session_info = batch_manager.get_session_info(user_id)
             current_count = session_info["total_count"] + 1 if session_info else 1
-            processing_message = f"📸 批次模式 - 正在處理第 {current_count} 張名片，請稍候..."
+            processing_message = (
+                f"📸 批次模式 - 正在處理第 {current_count} 張名片，請稍候..."
+            )
         else:
             processing_message = "📸 收到名片圖片！正在使用 AI 識別中，請稍候..."
 

@@ -113,7 +113,9 @@ def test_event_loop_error_simulation():
 
                 async def use_semaphore():
                     try:
-                        print(f"   嘗試在新事件循環中使用: {id(asyncio.get_running_loop())}")
+                        print(
+                            f"   嘗試在新事件循環中使用: {id(asyncio.get_running_loop())}"
+                        )
                         # 這應該會引發錯誤（如果沒有修復）
                         async with semaphore:
                             print("   ✅ 成功使用 Semaphore")
