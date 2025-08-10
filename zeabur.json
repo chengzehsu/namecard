@@ -1,6 +1,7 @@
 {
   "build": {
-    "command": "pip install -r requirements.txt"
+    "command": "pip install -r requirements.txt",
+    "directory": "."
   },
   "environment": {
     "FLASK_ENV": "production",
@@ -21,6 +22,8 @@
     "hkg"
   ],
   "start": {
-    "command": "python app.py"
-  }
+    "command": "python app.py",
+    "directory": "."
+  },
+  "workdir": "."
 }
