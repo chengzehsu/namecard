@@ -144,45 +144,17 @@ jobs:
           exit 1
         fi
         
-    - name: 創建部署配置
+    - name: 檢查部署配置
       run: |
-        echo "⚙️ 創建 Zeabur 部署配置..."
+        echo "⚙️ 檢查 zeabur.json 配置..."
         
-        # 創建強制重建的配置文件
-        cat > zeabur.json << END_OF_CONFIG
-        {
-          "build": {
-            "command": "pip install -r requirements.txt",
-            "force": true,
-            "nocache": true
-          },
-          "environment": {
-            "FLASK_ENV": "production",
-            "PORT": "5002",
-            "PYTHONUNBUFFERED": "1",
-            "PYTHON_VERSION": "3.9",
-            "SERVICE_TYPE": "line-bot",
-            "FORCE_REBUILD": "$(date +%s)"
-          },
-          "healthcheck": {
-            "interval": 30,
-            "path": "/health",
-            "retries": 3,
-            "timeout": 10
-          },
-          "name": "line-bot-namecard",
-          "port": 5002,
-          "regions": [
-            "hkg"
-          ],
-          "start": {
-            "command": "python app.py"
-          }
-        }
-        END_OF_CONFIG
-        
-        echo "✅ 強制重建配置已創建"
-        cat zeabur.json
+        if [ -f "zeabur.json" ]; then
+          echo "✅ 使用現有 zeabur.json 配置:"
+          cat zeabur.json
+        else
+          echo "❌ zeabur.json 配置文件不存在"
+          exit 1
+        fi
         
     - name: 部署到 Zeabur
       id: deploy
