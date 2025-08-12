@@ -7,11 +7,11 @@
   },
   "environment": {
     "FLASK_ENV": "production",
+    "FORCE_REBUILD": "20250812",
     "PORT": "5002",
     "PYTHONUNBUFFERED": "1",
     "PYTHON_VERSION": "3.9",
-    "SERVICE_TYPE": "line-bot",
-    "FORCE_REBUILD": "20250811"
+    "SERVICE_TYPE": "line-bot"
   },
   "healthcheck": {
     "interval": 30,
